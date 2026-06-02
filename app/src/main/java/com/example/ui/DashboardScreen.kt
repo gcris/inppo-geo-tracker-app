@@ -193,7 +193,16 @@ fun DashboardScreen(
                                 if (isShiftActive) {
                                     viewModel.stopTrackingShift()
                                 } else {
-                                    viewModel.startTrackingShift()
+                                    if (isLocationEnabled) {
+                                        viewModel.startTrackingShift()
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Cannot start patrol: Please enable system GPS/location first.",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                        onEnableLocation()
+                                    }
                                 }
                             }
                         )

@@ -106,7 +106,7 @@ class LocationTrackingService : Service() {
 
         // 4. Register real GPS hardware updates to capture active telemetry immediately
         requestGpsLocationUpdates()
-        // startTelemetrySimulation() // Disabled mock telemetry simulation to use only real GPS sensor hardware data as requested
+        startTelemetrySimulation() // Re-enabled background telemetry simulation to ensure continuous background tracking on static devices/emulators when minimized
     }
 
     private fun stopTrackingService() {

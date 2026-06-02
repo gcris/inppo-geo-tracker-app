@@ -47,6 +47,12 @@ class TrackingRepository(private val context: Context) {
 
     private var activeToken: String? = null
 
+    private fun formatManilaTime(pattern: String, date: Date = Date()): String {
+        val sdf = SimpleDateFormat(pattern, Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("Asia/Manila")
+        return sdf.format(date)
+    }
+
     init {
         // Automatically check if database is empty on initialization, and seed demo PNP data
         CoroutineScope(Dispatchers.IO).launch {
@@ -203,11 +209,11 @@ class TrackingRepository(private val context: Context) {
                 vehicle = VehicleEntity(
                     id = UUID.randomUUID().toString(),
                     plateNumber = "PNP-FOOT-${entity.badgeNumber.takeLast(4)}",
-                    createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
+                    createdAt = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                     personnelId = entity.id,
                     unitId = entity.unitId,
                     loadStatus = "ACTIVE_PATROL",
-                    lastLoadUpdate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                    lastLoadUpdate = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'")
                 )
                 vehicleDao.insertVehicle(vehicle)
             }
@@ -238,7 +244,7 @@ class TrackingRepository(private val context: Context) {
             if (schedule == null) {
                 schedule = ScheduleEntity(
                     id = UUID.randomUUID().toString(),
-                    date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                    date = formatManilaTime("yyyy-MM-dd"),
                     timeFrom = "08:00",
                     timeTo = "17:00",
                     sector = "Sector 4 (Intramuros & Ermita Foot Patrol district)",
@@ -326,11 +332,11 @@ class TrackingRepository(private val context: Context) {
                 vehicle = VehicleEntity(
                     id = UUID.randomUUID().toString(),
                     plateNumber = "PNP-FOOT-${personnel.badgeNumber.takeLast(4)}",
-                    createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
+                    createdAt = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                     personnelId = personnel.id,
                     unitId = personnel.unitId,
                     loadStatus = "ACTIVE_PATROL",
-                    lastLoadUpdate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                    lastLoadUpdate = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'")
                 )
                 vehicleDao.insertVehicle(vehicle)
             }
@@ -366,7 +372,7 @@ class TrackingRepository(private val context: Context) {
             if (schedule == null) {
                 schedule = ScheduleEntity(
                     id = UUID.randomUUID().toString(),
-                    date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                    date = formatManilaTime("yyyy-MM-dd"),
                     timeFrom = "08:00",
                     timeTo = "17:00",
                     sector = "Sector 4 (Intramuros & Ermita Foot Patrol district)",
@@ -413,11 +419,11 @@ class TrackingRepository(private val context: Context) {
             val newVehicle = VehicleEntity(
                 id = "eeca1d4a-67bf-46b4-b10c-d19602ca5aba",
                 plateNumber = "PNP-FOOT-$suffix",
-                createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
+                createdAt = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                 personnelId = personnel?.id ?: "fallback-id",
                 unitId = personnel?.unitId ?: "fallback-unit-id",
                 loadStatus = "ACTIVE_PATROL",
-                lastLoadUpdate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                lastLoadUpdate = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'")
             )
             vehicleDao.insertVehicle(newVehicle)
             _currentVehicle.value = newVehicle
@@ -430,7 +436,7 @@ class TrackingRepository(private val context: Context) {
             longitude = longitude,
             speed = speed.toDouble(),
             networkSignal = signal,
-            capturedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
+            capturedAt = formatManilaTime("yyyy-MM-dd'T'HH:mm:ss'Z'"),
             isSynced = false
         )
         vehicleLogDao.insertLog(logEntity)

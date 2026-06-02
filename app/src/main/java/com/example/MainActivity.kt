@@ -123,6 +123,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::mainViewModel.isInitialized) {
+            mainViewModel.checkLocationEnabledState()
+        }
+    }
+
     private fun requestOperationalPermissions() {
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
