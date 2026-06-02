@@ -1,0 +1,6 @@
+{
+  "name": "PNP Geo Tracker",
+  "description": "Production-ready PNP foot patrol tracking application with secure auth, background tracking, and offline database synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
