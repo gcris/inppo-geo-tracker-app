@@ -39,14 +39,30 @@ import com.example.ui.theme.*
 @Composable
 fun LoginScreen(
     viewModel: MainViewModel,
+    onEnableLocation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val loginState by viewModel.loginState.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val isLocationEnabled by viewModel.isLocationEnabled.collectAsState()
     var emailInput by remember { mutableStateOf("itsme.gerrycriscariaga@gmail.com") }
     var passwordInput by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.checkLocationEnabledState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val backgroundColors = if (isDarkTheme) {
         listOf(PnpNavyDark, Color(0xFF070B14))
@@ -130,6 +146,57 @@ fun LoginScreen(
                 .fillMaxWidth()
                 .widthIn(max = 480.dp)
         ) {
+            if (!isLocationEnabled) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = PnpStatusError.copy(alpha = 0.15f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PnpStatusError)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "GPS Error",
+                                tint = PnpStatusError,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "DEVICE GPS IS DISABLED",
+                                fontWeight = FontWeight.Bold,
+                                color = PnpStatusError,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "PNP Geo-Tracking requires high-accuracy system GPS services to be enabled globally. Please turn on Location/GPS below.",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                onEnableLocation()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PnpStatusError)
+                        ) {
+                            Text("ENABLE DEVICE LOCATION", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+
             // PNP Gold Emblem representation (Canvas)
             PnpBadgeVector(modifier = Modifier.size(110.dp))
 

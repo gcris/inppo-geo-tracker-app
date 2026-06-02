@@ -38,6 +38,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isDarkTheme = MutableStateFlow(true) // Dynamic Light/Dark selection (defaulting to PNP dark theme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
+    private val _isLocationEnabled = MutableStateFlow(true)
+    val isLocationEnabled: StateFlow<Boolean> = _isLocationEnabled.asStateFlow()
+
+    init {
+        checkLocationEnabledState()
+    }
+
+    fun checkLocationEnabledState() {
+        val context = getApplication<Application>().applicationContext
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val isGpsEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ?: false
+        val isNetworkEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ?: false
+        _isLocationEnabled.value = isGpsEnabled || isNetworkEnabled
+    }
+
     fun toggleTheme() {
         _isDarkTheme.value = !_isDarkTheme.value
     }

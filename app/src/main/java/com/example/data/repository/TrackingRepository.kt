@@ -402,7 +402,24 @@ class TrackingRepository(private val context: Context) {
     }
 
     suspend fun cacheLocationLog(latitude: Double, longitude: Double, speed: Float) = withContext(Dispatchers.IO) {
-        val vehicle = _currentVehicle.value ?: return@withContext
+        var vehicle = _currentVehicle.value
+        if (vehicle == null) {
+            val personnel = _currentPersonnel.value
+            val badgeStr = personnel?.badgeNumber ?: "4820"
+            val suffix = if (badgeStr.length >= 4) badgeStr.takeLast(4) else "4820"
+            val newVehicle = VehicleEntity(
+                id = "fallback-vehicle-id-$suffix",
+                plateNumber = "PNP-FOOT-$suffix",
+                createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
+                personnelId = personnel?.id ?: "fallback-id",
+                unitId = personnel?.unitId ?: "fallback-unit-id",
+                loadStatus = "ACTIVE_PATROL",
+                lastLoadUpdate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+            )
+            vehicleDao.insertVehicle(newVehicle)
+            _currentVehicle.value = newVehicle
+            vehicle = newVehicle
+        }
         val signal = getNetworkSignalStrength()
         val logEntity = VehicleLogEntity(
             vehicleId = vehicle.id,

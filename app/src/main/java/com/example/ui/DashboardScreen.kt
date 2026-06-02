@@ -36,6 +36,7 @@ import java.util.*
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
+    onEnableLocation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentPersonnel by viewModel.currentPersonnel.collectAsState()
@@ -44,6 +45,21 @@ fun DashboardScreen(
     val loggedPaths by viewModel.loggedPaths.collectAsState()
     val unsyncedCount by viewModel.unsyncedCount.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
+    val isLocationEnabled by viewModel.isLocationEnabled.collectAsState()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.checkLocationEnabledState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     var activeTab by remember { mutableStateOf("LIVE_TRACKER") } // TABS: "LIVE_TRACKER", "Schedules"
 
@@ -116,6 +132,59 @@ fun DashboardScreen(
                 }
 
                 if (activeTab == "LIVE_TRACKER") {
+                    if (!isLocationEnabled) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = PnpStatusError.copy(alpha = 0.15f)
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, PnpStatusError)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = "GPS Error",
+                                            tint = PnpStatusError,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Text(
+                                            text = "DEVICE GPS IS DISABLED",
+                                            fontWeight = FontWeight.Bold,
+                                            color = PnpStatusError,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Your phone's system location switch is turned off. To map coordinates, you must enable global GPS services.",
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = {
+                                            onEnableLocation()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PnpStatusError)
+                                    ) {
+                                        Text("ENABLE SYSTEM LOCATION / GPS", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // 4. SHIFT ACTIVATION CONTROL PAD
                     item {
                         ShiftControlCard(

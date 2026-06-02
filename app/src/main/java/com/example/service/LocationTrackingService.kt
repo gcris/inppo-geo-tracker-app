@@ -28,6 +28,9 @@ class LocationTrackingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var fusedLocationClient: FusedLocationProviderClient? = null
     private var locationCallback: LocationCallback? = null
+    private var nativeLocationManager: android.location.LocationManager? = null
+    private var nativeLocationListener: android.location.LocationListener? = null
+    private var lastUpdatedTime = 0L
 
     // Intramuros Foot Patrol Route Coordinates Loop
     private val patrolRoute = listOf(
@@ -58,6 +61,7 @@ class LocationTrackingService : Service() {
         Log.d("LocationTrackingService", "Service Created")
         repository = (application as PnpGeoTrackerApp).trackingRepository
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        nativeLocationManager = getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
         createNotificationChannel()
     }
 
@@ -116,6 +120,10 @@ class LocationTrackingService : Service() {
                 fusedLocationClient?.removeLocationUpdates(it)
                 locationCallback = null
             }
+            nativeLocationListener?.let {
+                nativeLocationManager?.removeUpdates(it)
+                nativeLocationListener = null
+            }
             serviceJob.cancel()
             // Reset job
             serviceJob = SupervisorJob()
@@ -128,6 +136,7 @@ class LocationTrackingService : Service() {
     }
 
     private fun requestGpsLocationUpdates() {
+        // --- 1. Request via Google Play Services Fused Location Client ---
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L).apply {
             setMinUpdateIntervalMillis(3000L)
         }.build()
@@ -135,6 +144,7 @@ class LocationTrackingService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (loc in locationResult.locations) {
+                    Log.d("LocationTrackingService", "FusedLocationProvider update: ${loc.latitude}, ${loc.longitude}")
                     processIncomingLocation(loc.latitude, loc.longitude, loc.speed)
                 }
             }
@@ -147,7 +157,46 @@ class LocationTrackingService : Service() {
                 mainLooper
             )
         } catch (unlikely: SecurityException) {
-            Log.e("LocationTrackingService", "Location permission missing or disabled!", unlikely)
+            Log.e("LocationTrackingService", "FusedLocation service permission missing", unlikely)
+        }
+
+        // --- 2. Fallback / Parallel request via System Native LocationManager ---
+        // This acts as a robust failover on GMS-less phones, indoors, or if AppOps restricts GMS background activity.
+        nativeLocationListener = object : android.location.LocationListener {
+            override fun onLocationChanged(location: Location) {
+                Log.d("LocationTrackingService", "Native LocationManager update: ${location.latitude}, ${location.longitude}")
+                processIncomingLocation(location.latitude, location.longitude, location.speed)
+            }
+        }
+
+        try {
+            val isGpsEnabled = nativeLocationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ?: false
+            val isNetworkEnabled = nativeLocationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ?: false
+
+            if (isGpsEnabled) {
+                nativeLocationManager?.requestLocationUpdates(
+                    android.location.LocationManager.GPS_PROVIDER,
+                    3000L, // minTime (3 seconds)
+                    0f,    // minDistance (0 meters)
+                    nativeLocationListener!!,
+                    mainLooper
+                )
+                Log.d("LocationTrackingService", "Registered system native GPS location provider")
+            }
+            if (isNetworkEnabled) {
+                nativeLocationManager?.requestLocationUpdates(
+                    android.location.LocationManager.NETWORK_PROVIDER,
+                    3000L,
+                    0f,
+                    nativeLocationListener!!,
+                    mainLooper
+                )
+                Log.d("LocationTrackingService", "Registered system native NETWORK location provider")
+            }
+        } catch (e: SecurityException) {
+            Log.e("LocationTrackingService", "Native location manager permission missing", e)
+        } catch (e: Exception) {
+            Log.e("LocationTrackingService", "Error starting native location service", e)
         }
     }
 
@@ -170,6 +219,12 @@ class LocationTrackingService : Service() {
     }
 
     private fun processIncomingLocation(latitude: Double, longitude: Double, speed: Float) {
+        val currentTime = System.currentTimeMillis()
+        // Deduplicate updates that are too frequent (within 1 second) and exactly identical to avoid database/network bloat
+        if (currentTime - lastUpdatedTime < 1000L && latitude == lastLat && longitude == lastLng) {
+            return
+        }
+        lastUpdatedTime = currentTime
         lastLat = latitude
         lastLng = longitude
 

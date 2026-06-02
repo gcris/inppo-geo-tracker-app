@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,8 +22,25 @@ import com.example.ui.DashboardScreen
 import com.example.ui.LoginScreen
 import com.example.ui.MainViewModel
 import com.example.ui.theme.MyApplicationTheme
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.*
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var mainViewModel: MainViewModel
+
+    private val checkSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            Log.d("MainActivity", "User enabled location settings from resolution dialog.")
+            if (::mainViewModel.isInitialized) {
+                mainViewModel.checkLocationEnabledState()
+            }
+        } else {
+            Log.d("MainActivity", "User declined to enable location settings.")
+        }
+    }
 
     private val permissionResultLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -36,6 +54,37 @@ class MainActivity : ComponentActivity() {
         }
 
         Log.d("MainActivity", "Permissions updated: Fine=$fineGranted, Coarse=$coarseGranted, Notification=$notifGranted")
+        if (fineGranted || coarseGranted) {
+            checkAndRequestLocationSettings()
+        }
+    }
+
+    fun checkAndRequestLocationSettings() {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L).build()
+        val builder = LocationSettingsRequest.Builder()
+            .addLocationRequest(locationRequest)
+            .setAlwaysShow(true)
+
+        val client = LocationServices.getSettingsClient(this)
+        val task = client.checkLocationSettings(builder.build())
+
+        task.addOnSuccessListener {
+            Log.d("MainActivity", "System location settings are already satisfied and high accuracy GPS is enabled.")
+            if (::mainViewModel.isInitialized) {
+                mainViewModel.checkLocationEnabledState()
+            }
+        }
+
+        task.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException) {
+                try {
+                    val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution.intentSender).build()
+                    checkSettingsLauncher.launch(intentSenderRequest)
+                } catch (sendEx: Exception) {
+                    Log.e("MainActivity", "Failed to launch settings resolution", sendEx)
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,23 +95,26 @@ class MainActivity : ComponentActivity() {
         requestOperationalPermissions()
 
         setContent {
-            val mainViewModel: MainViewModel = viewModel()
-            val isDarkTheme by mainViewModel.isDarkTheme.collectAsState()
+            val vm: MainViewModel = viewModel()
+            this.mainViewModel = vm
+            val isDarkTheme by vm.isDarkTheme.collectAsState()
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
-                val currentPersonnel by mainViewModel.currentPersonnel.collectAsState()
+                val currentPersonnel by vm.currentPersonnel.collectAsState()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
                     if (currentPersonnel == null) {
                         LoginScreen(
-                            viewModel = mainViewModel,
+                            viewModel = vm,
+                            onEnableLocation = { checkAndRequestLocationSettings() },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
                         DashboardScreen(
-                            viewModel = mainViewModel,
+                            viewModel = vm,
+                            onEnableLocation = { checkAndRequestLocationSettings() },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
