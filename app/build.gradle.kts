@@ -58,6 +58,21 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
+// Dynamically generate the .env file from environment variables if present
+val envUrl = System.getenv("SUPABASE_URL") ?: ""
+val envKey = System.getenv("SUPABASE_ANON_KEY") ?: ""
+val envGemini = System.getenv("GEMINI_API_KEY") ?: ""
+
+if (envUrl.isNotEmpty() || envKey.isNotEmpty() || envGemini.isNotEmpty()) {
+    val envFile = file("${rootDir}/.env")
+    val envContent = buildString {
+        if (envUrl.isNotEmpty()) append("SUPABASE_URL=").append(envUrl).append("\n")
+        if (envKey.isNotEmpty()) append("SUPABASE_ANON_KEY=").append(envKey).append("\n")
+        if (envGemini.isNotEmpty()) append("GEMINI_API_KEY=").append(envGemini).append("\n")
+    }
+    envFile.writeText(envContent)
+}
+
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
 secrets {

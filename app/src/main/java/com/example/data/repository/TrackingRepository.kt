@@ -45,6 +45,8 @@ class TrackingRepository(private val context: Context) {
     private val _syncStatus = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncStatus: StateFlow<SyncState> = _syncStatus.asStateFlow()
 
+    private var activeToken: String? = null
+
     init {
         // Automatically check if database is empty on initialization, and seed demo PNP data
         CoroutineScope(Dispatchers.IO).launch {
@@ -60,7 +62,7 @@ class TrackingRepository(private val context: Context) {
     sealed interface SyncState {
         object Idle : SyncState
         object Syncing : SyncState
-        data class Success(val syncedCount: Int) : SyncState
+        data class Success(val syncedCount: Int, val isSimulated: Boolean = false) : SyncState
         data class Error(val message: String) : SyncState
     }
 
@@ -108,6 +110,7 @@ class TrackingRepository(private val context: Context) {
                 ?: return@withContext LoginResult.Error("Received empty response body from Supabase.")
 
             val accessToken = body.accessToken
+            activeToken = accessToken
             val authUser = body.user
             val authHeader = "Bearer $accessToken"
 
@@ -408,7 +411,7 @@ class TrackingRepository(private val context: Context) {
             val badgeStr = personnel?.badgeNumber ?: "4820"
             val suffix = if (badgeStr.length >= 4) badgeStr.takeLast(4) else "4820"
             val newVehicle = VehicleEntity(
-                id = "fallback-vehicle-id-$suffix",
+                id = "eeca1d4a-67bf-46b4-b10c-d19602ca5aba",
                 plateNumber = "PNP-FOOT-$suffix",
                 createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
                 personnelId = personnel?.id ?: "fallback-id",
@@ -439,7 +442,7 @@ class TrackingRepository(private val context: Context) {
         }
     }
 
-    suspend fun syncCachedLogs() = withContext(Dispatchers.IO) {
+    suspend fun syncCachedLogs(overrideVehicleId: String? = null) = withContext(Dispatchers.IO) {
         if (_syncStatus.value == SyncState.Syncing) return@withContext
         _syncStatus.value = SyncState.Syncing
 
@@ -448,9 +451,12 @@ class TrackingRepository(private val context: Context) {
             return@withContext
         }
 
+        val targetVehicleId = overrideVehicleId ?: "eeca1d4a-67bf-46b4-b10c-d19602ca5aba"
+        vehicleLogDao.updateUnsyncedVehicleId(targetVehicleId)
+
         val unsynced = vehicleLogDao.getUnsyncedLogs()
         if (unsynced.isEmpty()) {
-            _syncStatus.value = SyncState.Success(0)
+            _syncStatus.value = SyncState.Success(0, isSimulated = !SupabaseClient.isSupabaseConfigured())
             return@withContext
         }
 
@@ -460,7 +466,7 @@ class TrackingRepository(private val context: Context) {
             val logIds = unsynced.map { it.id }
             vehicleLogDao.markAsSynced(logIds)
             vehicleLogDao.deleteSyncedLogs()
-            _syncStatus.value = SyncState.Success(unsynced.size)
+            _syncStatus.value = SyncState.Success(unsynced.size, isSimulated = true)
             Log.d("TrackingRepository", "[Simulation] Synced ${unsynced.size} logs to Supabase vehicle_logs table successfully")
             return@withContext
         }
@@ -476,7 +482,7 @@ class TrackingRepository(private val context: Context) {
             val dtoList = unsynced.map {
                 VehicleLogDto(
                     id = it.id,
-                    vehicleId = it.vehicleId,
+                    vehicleId = targetVehicleId,
                     latitude = it.latitude,
                     longitude = it.longitude,
                     speed = it.speed,
@@ -486,14 +492,15 @@ class TrackingRepository(private val context: Context) {
             }
 
             val key = BuildConfig.SUPABASE_ANON_KEY
-            val authHeader = "Bearer $key"
+            val token = activeToken
+            val authHeader = if (!token.isNullOrEmpty()) "Bearer $token" else "Bearer $key"
             val response = api.uploadLogs(dtoList, key, authHeader)
 
             if (response.isSuccessful) {
                 val logIds = unsynced.map { it.id }
                 vehicleLogDao.markAsSynced(logIds)
                 vehicleLogDao.deleteSyncedLogs()
-                _syncStatus.value = SyncState.Success(unsynced.size)
+                _syncStatus.value = SyncState.Success(unsynced.size, isSimulated = false)
                 Log.d("TrackingRepository", "Real sync: Synced ${unsynced.size} logs to Supabase successfully")
             } else {
                 val errMsg = response.errorBody()?.string() ?: "Sync HTTP error code: ${response.code()}"
@@ -551,7 +558,7 @@ class TrackingRepository(private val context: Context) {
 
             // Seed Vehicles assignments
             val vehicle = VehicleEntity(
-                id = "c3bcfe10-ea9e-4ebf-8182-cdcba93eaffe",
+                id = "eeca1d4a-67bf-46b4-b10c-d19602ca5aba",
                 plateNumber = "PNP-EP-391",
                 createdAt = "2026-06-01T08:00:00Z",
                 personnelId = "9a7bde06-a831-4db3-96b1-096bade8cc12", // Gerry Cris Cariaga

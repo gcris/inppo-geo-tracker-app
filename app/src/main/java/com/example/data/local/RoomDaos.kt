@@ -59,6 +59,9 @@ interface VehicleLogDao {
     @Query("SELECT * FROM vehicle_logs WHERE isSynced = 0 ORDER BY capturedAt ASC")
     suspend fun getUnsyncedLogs(): List<VehicleLogEntity>
 
+    @Query("UPDATE vehicle_logs SET vehicleId = :vehicleId WHERE isSynced = 0")
+    suspend fun updateUnsyncedVehicleId(vehicleId: String)
+
     @Query("UPDATE vehicle_logs SET isSynced = 1 WHERE id IN (:logIds)")
     suspend fun markAsSynced(logIds: List<String>)
 

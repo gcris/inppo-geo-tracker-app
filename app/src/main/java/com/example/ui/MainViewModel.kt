@@ -156,7 +156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun manualSync() {
         viewModelScope.launch {
-            repository.syncCachedLogs()
+            repository.syncCachedLogs(overrideVehicleId = "eeca1d4a-67bf-46b4-b10c-d19602ca5aba")
         }
     }
 

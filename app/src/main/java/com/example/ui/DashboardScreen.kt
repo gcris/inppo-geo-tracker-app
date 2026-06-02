@@ -676,7 +676,13 @@ fun SyncLocalEngineCard(
             val infoText = when (syncStatus) {
                 is TrackingRepository.SyncState.Idle -> "Standing by. Buffering captures logs to local cache of device and uploads automatically on active cellular signal."
                 is TrackingRepository.SyncState.Syncing -> "Establishing cryptographic link... POSTing logs list schema securely down Supabase vehicle_logs REST endpoint."
-                is TrackingRepository.SyncState.Success -> "Synchronization successfully completed: uploaded ${syncStatus.syncedCount} log rows safely to cloud schema."
+                is TrackingRepository.SyncState.Success -> {
+                    if (syncStatus.isSimulated) {
+                        "OFFLINE SIMULATION: Saved ${syncStatus.syncedCount} logs locally. (Bypassed Supabase upload because SUPABASE_URL in Secrets is a placeholder or empty)."
+                    } else {
+                        "Synchronization successfully completed: uploaded ${syncStatus.syncedCount} log rows safely to cloud schema."
+                    }
+                }
                 is TrackingRepository.SyncState.Error -> "Sync deferred: ${syncStatus.message}. Logs held in SQLite backup and will retry shortly."
             }
 
@@ -685,7 +691,7 @@ fun SyncLocalEngineCard(
                 fontSize = 11.sp,
                 color = when (syncStatus) {
                     is TrackingRepository.SyncState.Error -> PnpStatusError
-                    is TrackingRepository.SyncState.Success -> PnpStatusActive
+                    is TrackingRepository.SyncState.Success -> if (syncStatus.isSimulated) MaterialTheme.colorScheme.error else PnpStatusActive
                     is TrackingRepository.SyncState.Syncing -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 },
