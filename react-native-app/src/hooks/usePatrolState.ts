@@ -24,7 +24,7 @@ import {
 } from '../services/BackgroundTracker';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateTOTP } from '../services/totp';
+import { generateTOTP, generateRandomSecret } from '../services/totp';
 
 export const usePatrolState = () => {
   const [personnel, setPersonnel] = useState<Personnel | null>(null);
@@ -223,12 +223,19 @@ export const usePatrolState = () => {
       badge = trimmedEmail.toUpperCase();
     }
 
-    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS BADGE BEFORE DOING LOGINS
+    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS BADGE BEFORE DOING LOGINS - FORCED COMPULSORY
     try {
-      const storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
+      let storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
+      if (!storedSecret) {
+        // Force-seed a dynamic random security key for this badge, making Google Authenticator strictly mandatory
+        const randomSecret = generateRandomSecret();
+        await AsyncStorage.setItem(`@pnp_2fa_secret_${badge}`, randomSecret);
+        storedSecret = randomSecret;
+      }
+
       if (storedSecret) {
         if (!otpCode) {
-          return 'NEED_2FA';
+          return `NEED_2FA_SECRET:${storedSecret}`;
         }
         // Validate OTP
         const expected = generateTOTP(storedSecret);
@@ -240,7 +247,7 @@ export const usePatrolState = () => {
         }
       }
     } catch (err) {
-      console.warn("AsyncStorage 2FA lookup error", err);
+      console.warn("AsyncStorage 2FA lookup/seeding error", err);
     }
 
     try {

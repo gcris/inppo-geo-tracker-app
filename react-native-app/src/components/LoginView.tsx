@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   ScrollView, 
   ActivityIndicator,
-  Alert
+  Alert,
+  Clipboard
 } from 'react-native';
 import { getStyles, getThemeColors } from '../theme/styles';
 
@@ -34,6 +35,7 @@ export const LoginView = ({
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
   const [otp, setOtp] = useState('');
+  const [mfaSecret, setMfaSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingState, setPendingState] = useState(false);
@@ -59,6 +61,10 @@ export const LoginView = ({
     setLoading(false);
 
     if (res === 'NEED_2FA') {
+      setStep('otp');
+    } else if (typeof res === 'string' && res.startsWith('NEED_2FA_SECRET:')) {
+      const secretKey = res.split(':')[1];
+      setMfaSecret(secretKey);
       setStep('otp');
     } else if (res === 'PENDING_APPROVAL') {
       setPendingState(true);
@@ -289,6 +295,44 @@ export const LoginView = ({
           }}>
             Your badge profile is protected with Two-Factor Identification. Enter the current 6-digit code from Google Authenticator to join active patrol shift status.
           </Text>
+
+          {mfaSecret ? (
+            <View style={{
+              backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF',
+              padding: 12,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.borderBlue || '#3B82F6',
+              marginBottom: 16,
+              alignItems: 'center'
+            }}>
+              <Text style={{ color: colors.accentAmber, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 }}>
+                GOOGLE AUTHENTICATOR SETUP KEY
+              </Text>
+              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 1 }}>
+                {mfaSecret}
+              </Text>
+              <TouchableOpacity 
+                style={{
+                  backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                  paddingVertical: 5,
+                  paddingHorizontal: 12,
+                  borderRadius: 4,
+                  marginTop: 8,
+                  borderColor: colors.borderBlue,
+                  borderWidth: 1
+                }}
+                onPress={() => {
+                  Clipboard.setString(mfaSecret);
+                  Alert.alert("Secret Copied", "Google Authenticator secret copied to device clipboard. Standard key input type inside your device Authenticator app.");
+                }}
+              >
+                <Text style={{ color: colors.textPrimary, fontSize: 10, fontWeight: 'bold' }}>
+                  📋 COPY SETUP KEY
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           <Text style={styles.inputLabel}>SIX-DIGIT SECURITY TOKEN</Text>
           <TextInput
