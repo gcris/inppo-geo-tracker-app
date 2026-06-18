@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "PNP Patroller Geotracker",
+    "slug": "pnp-geo-tracker-rn",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pnp.geotracker"
+    },
+    "android": {
+      "package": "com.pnp.geotracker",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ]
+    }
+  }
+}
