@@ -23,6 +23,7 @@ import {
 } from '../services/BackgroundTracker';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateTOTP } from '../services/totp';
 
 export const usePatrolState = () => {
   const [personnel, setPersonnel] = useState<Personnel | null>(null);
@@ -36,6 +37,8 @@ export const usePatrolState = () => {
   const [isGpsEnabled, setIsGpsEnabled] = useState<boolean>(false);
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  const [is2FAEnabled, setIs2FAEnabled] = useState<boolean>(false);
 
   // Checks device's system GPS status
   const checkLocationPermissionState = useCallback(async () => {
@@ -102,6 +105,58 @@ export const usePatrolState = () => {
     }
   };
 
+  // Google 2FA settings & check effects
+  useEffect(() => {
+    const check2FA = async () => {
+      if (personnel) {
+        try {
+          const secret = await AsyncStorage.getItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
+          setIs2FAEnabled(!!secret);
+        } catch (e) {
+          console.warn("Error checking 2FA state", e);
+        }
+      } else {
+        setIs2FAEnabled(false);
+      }
+    };
+    check2FA();
+  }, [personnel]);
+
+  const enable2FA = async (secret: string, code: string): Promise<boolean> => {
+    if (!personnel) return false;
+    try {
+      const expected = generateTOTP(secret);
+      const expectedPrev = generateTOTP(secret, Math.floor(Date.now() / 1000) - 30);
+      const expectedNext = generateTOTP(secret, Math.floor(Date.now() / 1000) + 30);
+      
+      if (code !== expected && code !== expectedPrev && code !== expectedNext) {
+        Alert.alert("Verification Failed", "The 6-digit Google Authenticator code you entered is incorrect. Double check your typing and current device clock.");
+        return false;
+      }
+
+      await AsyncStorage.setItem(`@pnp_2fa_secret_${personnel.badgeNumber}`, secret);
+      setIs2FAEnabled(true);
+      Alert.alert("2FA Secured", "Google Authenticator two-factor authentication has been successfully locked to your PNP badge profile!");
+      return true;
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Setup Error", "An error occurred while enabling two-factor authentication.");
+      return false;
+    }
+  };
+
+  const disable2FA = async () => {
+    if (!personnel) return;
+    try {
+      await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
+      setIs2FAEnabled(false);
+      Alert.alert("2FA Disabled", "Google Authenticator is now disabled. Warning: Your officer profile is no longer protected by MFA.");
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Disable Error", "An error occurred while disabling two-factor authentication.");
+    }
+  };
+
   // Synchronize logs & counts when off/on shift, with optional automatic remote sync (preserves cellular logs inside SQLite when turned off)
   useEffect(() => {
     let logTimer: NodeJS.Timeout | null = null;
@@ -144,11 +199,32 @@ export const usePatrolState = () => {
     }
   };
 
-  const login = async (badgeInput: string, fullnameInput: string): Promise<boolean> => {
+  const login = async (badgeInput: string, fullnameInput: string, otpCode?: string): Promise<boolean | 'NEED_2FA'> => {
     const trimmedBadge = badgeInput.trim();
     if (!trimmedBadge) {
       Alert.alert("Missing Badge", "Please input your official PNP badge number.");
       return false;
+    }
+
+    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS BADGE BEFORE DOING LOGINS
+    try {
+      const storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${trimmedBadge}`);
+      if (storedSecret) {
+        if (!otpCode) {
+          return 'NEED_2FA';
+        }
+        // Validate OTP
+        const expected = generateTOTP(storedSecret);
+        const expectedPrev = generateTOTP(storedSecret, Math.floor(Date.now() / 1000) - 30);
+        const expectedNext = generateTOTP(storedSecret, Math.floor(Date.now() / 1000) + 30);
+        
+        if (otpCode !== expected && otpCode !== expectedPrev && otpCode !== expectedNext) {
+          Alert.alert("Invalid 2FA Token", "The Google Authenticator 6-digit verification code you entered is invalid or expired. Please check your authenticator clock.");
+          return false;
+        }
+      }
+    } catch (err) {
+      console.warn("AsyncStorage 2FA lookup error", err);
     }
 
     try {
@@ -541,5 +617,8 @@ export const usePatrolState = () => {
     openSystemSettings,
     triggerEmergencySOS,
     toggleAutoSync,
+    is2FAEnabled,
+    enable2FA,
+    disable2FA,
   };
 };

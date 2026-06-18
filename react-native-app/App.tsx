@@ -31,6 +31,9 @@ export default function App() {
     openSystemSettings,
     triggerEmergencySOS,
     toggleAutoSync,
+    is2FAEnabled,
+    enable2FA,
+    disable2FA,
   } = usePatrolState();
 
   // If there's no authenticated officer, render target credentials lock view
@@ -106,6 +109,10 @@ export default function App() {
           unsyncedCount={unsyncedCount}
           onClearCache={flushSyncedCache}
           isShiftActive={isShiftActive}
+          badge={personnel?.badgeNumber || '000000'}
+          is2FAEnabled={is2FAEnabled}
+          onEnable2FA={enable2FA}
+          onDisable2FA={disable2FA}
         />
       )}
     </SafeAreaView>
