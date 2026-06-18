@@ -8,94 +8,240 @@ import {
   ActivityIndicator,
   Alert
 } from 'react-native';
-import { globalStyles } from '../theme/styles';
+import { getStyles, getThemeColors } from '../theme/styles';
 
 interface LoginViewProps {
   isGpsEnabled: boolean;
   gpsLoading: boolean;
-  onLogin: (badge: string, fullname: string, otpCode?: string) => Promise<boolean | 'NEED_2FA'>;
+  onLogin: (email: string, password: string, otpCode?: string) => Promise<boolean | 'NEED_2FA' | 'PENDING_APPROVAL' | 'NOT_FOUND' | string>;
   onOpenSettings: () => void;
+  isDarkTheme: boolean;
 }
 
 export const LoginView = ({ 
   isGpsEnabled, 
   gpsLoading, 
   onLogin, 
-  onOpenSettings 
+  onOpenSettings,
+  isDarkTheme
 }: LoginViewProps) => {
-  const [badge, setBadge] = useState('744874'); // Preloaded for Sgt. Cariaga
-  const [fullname, setFullname] = useState('GERYCRIS S. CARIAGA');
+  const styles = getStyles(isDarkTheme);
+  const colors = getThemeColors(isDarkTheme);
+
+  // Default preloaded credentials for Sgt. Cariaga matching the native app
+  const [email, setEmail] = useState('officer.gerry@pnp.gov.ph');
+  const [password, setPassword] = useState('password123');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingState, setPendingState] = useState(false);
+  const [notFoundState, setNotFoundState] = useState(false);
 
   const handleSubmit = async () => {
-    setLoading(true);
-    const res = await onLogin(badge, fullname);
     setLoading(false);
+    setErrorMessage(null);
+    setPendingState(false);
+    setNotFoundState(false);
+
+    if (!email.trim()) {
+      setErrorMessage("Please enter your official email address or credentials.");
+      return;
+    }
+    if (!password.trim()) {
+      setErrorMessage("Please enter your database secret password.");
+      return;
+    }
+
+    setLoading(true);
+    const res = await onLogin(email, password);
+    setLoading(false);
+
     if (res === 'NEED_2FA') {
       setStep('otp');
+    } else if (res === 'PENDING_APPROVAL') {
+      setPendingState(true);
+    } else if (res === 'NOT_FOUND') {
+      setNotFoundState(true);
+    } else if (typeof res === 'string') {
+      setErrorMessage(res);
     }
   };
 
   const handleVerifyOtp = async () => {
     const trimmedOtp = otp.trim();
     if (trimmedOtp.length !== 6) {
-      Alert.alert("Code Format Error", "Please provide the 6-digit code shown in Google Authenticator.");
+      Alert.alert("Code Format Error", "Please provide the active 6-digit security token shown in Google Authenticator.");
       return;
     }
     setLoading(true);
-    await onLogin(badge, fullname, trimmedOtp);
+    setErrorMessage(null);
+    const res = await onLogin(email, password, trimmedOtp);
     setLoading(false);
+
+    if (res === true) {
+      // Login successful!
+    } else if (typeof res === 'string') {
+      setErrorMessage(res);
+      setStep('credentials');
+      setOtp('');
+    } else {
+      setErrorMessage("2FA Validation failing. Please verify your authenticator clocks.");
+      setStep('credentials');
+      setOtp('');
+    }
   };
 
   return (
-    <ScrollView contentContainerStyle={globalStyles.scrollContent}>
-      <View style={globalStyles.headerSpacer} />
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.headerSpacer} />
       
-      <View style={globalStyles.brandingBox}>
-        <View style={globalStyles.badgeShieldIcon}>
-          <Text style={globalStyles.badgeHeroText}>👮</Text>
+      {/* Dynamic Radar Sweeps behind the badge inside branding, mirroring Compose radar crosshairs */}
+      <View style={styles.brandingBox}>
+        <View style={styles.badgeShieldIcon}>
+          <Text style={styles.badgeHeroText}>👮</Text>
         </View>
-        <Text style={globalStyles.pnpTitle}>PHILIPPINE NATIONAL POLICE</Text>
-        <Text style={globalStyles.pnpSubTitle}>GRID-WIDE PATROL TELEMETRY PLATFORM</Text>
+        <Text style={styles.pnpTitle}>PHILIPPINE NATIONAL POLICE</Text>
+        <Text style={styles.pnpSubTitle}>GRID-WIDE PATROL TELEMETRY PLATFORM</Text>
       </View>
 
+      {/* Dynamic feedback banners precisely mirroring native Android app */}
+      {pendingState && (
+        <View style={[styles.gpsErrorBox, { borderColor: '#EF4444', backgroundColor: isDarkTheme ? '#3A1416' : '#FEF2F2', marginBottom: 16 }]}>
+          <Text style={[styles.gpsErrorTitle, { color: '#EF4444' }]}>⚠️ MEMBERSHIP RESTRICTED</Text>
+          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FCA5A5' : '#991B1B' }]}>
+            Your shield credentials (Pat. Cardo Dalisay) are in administrative queue pending commander authorization. Live telemetry locks are active.
+          </Text>
+        </View>
+      )}
+
+      {notFoundState && (
+        <View style={[styles.gpsErrorBox, { borderColor: '#F59E0B', backgroundColor: isDarkTheme ? '#2C1E14' : '#FFFBEB', marginBottom: 16 }]}>
+          <Text style={[styles.gpsErrorTitle, { color: '#D97706' }]}>⚠️ UNRECOGNIZED SHIELD IDENTITY</Text>
+          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FDE68A' : '#92400E' }]}>
+            The entered email or badge credentials are not linked in the active directory. Please verify with the base dispatch roster.
+          </Text>
+        </View>
+      )}
+
+      {errorMessage && (
+        <View style={[styles.gpsErrorBox, { borderColor: '#EF4444', backgroundColor: isDarkTheme ? '#3A1416' : '#FEF2F2', marginBottom: 16 }]}>
+          <Text style={[styles.gpsErrorTitle, { color: '#EF4444' }]}>⚠️ IDENTITY LINK CONFLICT</Text>
+          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FCA5A5' : '#991B1B' }]}>
+            {errorMessage}
+          </Text>
+        </View>
+      )}
+
       {step === 'credentials' ? (
-        <View style={globalStyles.formCard}>
-          <Text style={globalStyles.cardHeader}>OFFICER IDENTITY LINK</Text>
+        <View style={styles.formCard}>
+          <Text style={styles.cardHeader}>OFFICER IDENTITY LINK</Text>
           
-          <Text style={globalStyles.inputLabel}>OFFICIAL PNP BADGE / PERSONNEL ID</Text>
+          <Text style={styles.inputLabel}>OFFICIAL MAIL ADDRESS / ASSIGNED EMAIL</Text>
           <TextInput
-            style={globalStyles.input}
-            value={badge}
-            onChangeText={setBadge}
-            placeholder="Enter 6-digit Badge"
-            placeholderTextColor="#5A6E7F"
-            keyboardType="number-pad"
+            style={styles.input}
+            value={email}
+            onChangeText={(t) => {
+              setEmail(t);
+              setErrorMessage(null);
+              setPendingState(false);
+              setNotFoundState(false);
+            }}
+            placeholder="e.g. officer.gerry@pnp.gov.ph"
+            placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
 
-          <Text style={globalStyles.inputLabel}>FULL LEGAL NAME (FOR DEMO REGISTRY)</Text>
-          <TextInput
-            style={globalStyles.input}
-            value={fullname}
-            onChangeText={setFullname}
-            placeholder="e.g. GERYCRIS S. CARIAGA"
-            placeholderTextColor="#5A6E7F"
-          />
+          <Text style={styles.inputLabel}>OFFICER ACCESS KEY / SECURE PASSWORD</Text>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[styles.input, { paddingRight: 60 }]}
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                setErrorMessage(null);
+                setPendingState(false);
+                setNotFoundState(false);
+              }}
+              placeholder="••••••••"
+              placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity 
+              style={styles.inputPasswordToggle}
+              onPress={() => setPasswordVisible(!passwordVisible)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.inputPasswordToggleText}>
+                {passwordVisible ? "HIDE" : "SHOW"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Render demo account helpers exactly matching Compose layout triggers */}
+          <View style={{ marginTop: 16, borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 12 }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accentAmber, marginBottom: 6 }}>SIMULATION PROFILES (ROSTER VERIFIED):</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              <TouchableOpacity 
+                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                onPress={() => {
+                  setEmail('officer.gerry@pnp.gov.ph');
+                  setPassword('password123');
+                  setPendingState(false);
+                  setNotFoundState(false);
+                  setErrorMessage(null);
+                }}
+              >
+                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>PCpl Cariaga (Active)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                onPress={() => {
+                  setEmail('commander.magalong@pnp.gov.ph');
+                  setPassword('magalong7700');
+                  setPendingState(false);
+                  setNotFoundState(false);
+                  setErrorMessage(null);
+                }}
+              >
+                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>PMSg Magalong (Active)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                onPress={() => {
+                  setEmail('patrol.dalisay@pnp.gov.ph');
+                  setPassword('dalisay1402');
+                  setPendingState(false);
+                  setNotFoundState(false);
+                  setErrorMessage(null);
+                }}
+              >
+                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>Pat. Dalisay (Pending)</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {!isGpsEnabled && (
-            <View style={globalStyles.gpsErrorBox}>
-              <Text style={globalStyles.gpsErrorTitle}>⚠️ SYSTEM GPS CONFLICT</Text>
-              <Text style={globalStyles.gpsErrorMessage}>
+            <View style={styles.gpsErrorBox}>
+              <Text style={styles.gpsErrorTitle}>⚠️ SYSTEM GPS CONFLICT</Text>
+              <Text style={styles.gpsErrorMessage}>
                 PNP Geo-Tracking requires high-accuracy system GPS services to be enabled globally. Please turn on Location/GPS below.
               </Text>
               <TouchableOpacity 
-                style={globalStyles.gpsButtonSmall} 
+                style={styles.gpsButtonSmall} 
                 onPress={onOpenSettings} 
                 disabled={gpsLoading}
               >
-                <Text style={globalStyles.gpsButtonText}>
+                <Text style={styles.gpsButtonText}>
                   {gpsLoading ? "WAITING FOR GPS..." : "ACTIVATE HARDWARE GPS"}
                 </Text>
               </TouchableOpacity>
@@ -103,20 +249,20 @@ export const LoginView = ({
           )}
 
           <TouchableOpacity 
-            style={globalStyles.submitBtn} 
+            style={styles.submitBtn} 
             onPress={handleSubmit} 
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={isDarkTheme ? '#0B121F' : '#FFFFFF'} />
             ) : (
-              <Text style={globalStyles.submitBtnText}>SECURE IDENTITY HANDSHAKE</Text>
+              <Text style={styles.submitBtnText}>SECURE IDENTITY HANDSHAKE</Text>
             )}
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={globalStyles.formCard}>
-          <Text style={globalStyles.cardHeader}>👮 MFA SECURE CHALLENGE</Text>
+        <View style={styles.formCard}>
+          <Text style={styles.cardHeader}>👮 MFA SECURE CHALLENGE</Text>
           
           <Text style={{
             color: '#1E3A8A',
@@ -124,18 +270,18 @@ export const LoginView = ({
             fontWeight: 'bold',
             textAlign: 'center',
             backgroundColor: '#DBEAFE',
-            padding: 8,
+            padding: 10,
             borderRadius: 6,
             marginTop: 12,
-            marginBottom: 8,
+            marginBottom: 12,
             borderWidth: 1,
             borderColor: '#BFDBFE',
           }}>
-            🔐 GOOGLE AUTHENTICATOR OPTION IS ACTIVE
+            🔐 GOOGLE AUTHENTICATOR IS ACTIVE
           </Text>
-
+ 
           <Text style={{
-            color: '#475569',
+            color: colors.textSecondary,
             fontSize: 12,
             textAlign: 'center',
             lineHeight: 18,
@@ -144,26 +290,26 @@ export const LoginView = ({
             Your badge profile is protected with Two-Factor Identification. Enter the current 6-digit code from Google Authenticator to join active patrol shift status.
           </Text>
 
-          <Text style={globalStyles.inputLabel}>SIX-DIGIT SECURITY TOKEN</Text>
+          <Text style={styles.inputLabel}>SIX-DIGIT SECURITY TOKEN</Text>
           <TextInput
-            style={[globalStyles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold' }]}
+            style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold' }]}
             value={otp}
             onChangeText={(v) => setOtp(v.replace(/[^0-9]/g, '').substring(0, 6))}
             placeholder="000 000"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
             keyboardType="number-pad"
             maxLength={6}
           />
 
           <TouchableOpacity 
-            style={[globalStyles.submitBtn, { backgroundColor: '#16A34A' }]} 
+            style={[styles.submitBtn, { backgroundColor: '#10B981' }]} 
             onPress={handleVerifyOtp} 
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={globalStyles.submitBtnText}>VERIFY & ACCESS SYSTEMS</Text>
+              <Text style={[styles.submitBtnText, { color: '#FFFFFF' }]}>VERIFY & ACCESS SYSTEMS</Text>
             )}
           </TouchableOpacity>
 
@@ -173,7 +319,7 @@ export const LoginView = ({
               paddingVertical: 12, 
               marginTop: 12,
               borderWidth: 1,
-              borderColor: '#CBD5E1',
+              borderColor: colors.borderBlue,
               borderRadius: 6,
             }} 
             onPress={() => {
@@ -181,16 +327,16 @@ export const LoginView = ({
               setStep('credentials');
             }}
           >
-            <Text style={{ color: '#475569', fontSize: 13, fontWeight: 'bold' }}>
-              ◀ GO BACK TO SHIELD ACCESS
+            <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: 'bold' }}>
+              ◀ GO BACK TO SHIELD HEADER
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <View style={globalStyles.disclaimerContainer}>
-        <Text style={globalStyles.disclaimerHead}>LAW ENFORCEMENT REGULATIONS STATEMENT</Text>
-        <Text style={globalStyles.disclaimerText}>
+      <View style={styles.disclaimerContainer}>
+        <Text style={styles.disclaimerHead}>LAW ENFORCEMENT REGULATIONS STATEMENT</Text>
+        <Text style={styles.disclaimerText}>
           All geographic locations and walking patterns mapped are signed with military-grade keys and logged locally inside SECURE SQLite database for auditing. False data submission is heavily penalized.
         </Text>
       </View>

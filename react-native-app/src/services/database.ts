@@ -60,26 +60,58 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   // Seed default PNP Personnel, Unit & Schedule data exactly like the Kotlin project does
   const countResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM personnel;');
   if (countResult && countResult.count === 0) {
-    await db.runAsync(`INSERT INTO unit (id, unitName) VALUES (?, ?);`, ['unit-manila-01', 'MANILA DISTRICT FOOT PATROL UNIT-4']);
+    const mdpUnitId = '91a92e15-5ec2-4217-baaa-c81b95ff88be';
+    await db.runAsync(`INSERT INTO unit (id, unitName) VALUES (?, ?);`, [mdpUnitId, 'Manila Police District (MPD)']);
     
+    // Seed the three exact officers
     await db.runAsync(`INSERT INTO personnel (id, badgeNumber, rank, fullname, unitId, isApproved, role) VALUES (?, ?, ?, ?, ?, ?, ?);`, [
-      'pnp-badge-7448',
-      '744874',
-      'PMASTER SGT',
-      'GERYCRIS S. CARIAGA',
-      'unit-manila-01',
+      '9a7bde06-a831-4db3-96b1-096bade8cc12',
+      'PNP-4820-2026',
+      'PCpl',
+      'Gerry Cris Cariaga',
+      mdpUnitId,
       1,
-      'PATROL_OFFICER'
+      'patrol'
+    ]);
+    await db.runAsync(`INSERT INTO personnel (id, badgeNumber, rank, fullname, unitId, isApproved, role) VALUES (?, ?, ?, ?, ?, ?, ?);`, [
+      '51bbaee6-d70b-4654-8e12-32b005fe1429',
+      'PNP-7700-1122',
+      'PMSg',
+      'Benjamin Magalong',
+      mdpUnitId,
+      1,
+      'commander'
+    ]);
+    await db.runAsync(`INSERT INTO personnel (id, badgeNumber, rank, fullname, unitId, isApproved, role) VALUES (?, ?, ?, ?, ?, ?, ?);`, [
+      'e5bcfe10-ea9e-4ebf-8182-cdcba93ea210',
+      'PNP-1402-2026',
+      'Pat',
+      'Cardo Dalisay',
+      mdpUnitId,
+      0, // PENDING STATE
+      'patrol'
     ]);
 
+    // Seed Vehicle Assignment
+    await db.runAsync(`INSERT INTO vehicles (id, plateNumber, createdAt, personnelId, unitId, loadStatus, lastLoadUpdate) VALUES (?, ?, ?, ?, ?, ?, ?);`, [
+      'eeca1d4a-67bf-46b4-b10c-d19602ca5aba',
+      'PNP-EP-391',
+      '2026-06-01T08:00:00Z',
+      '9a7bde06-a831-4db3-96b1-096bade8cc12',
+      mdpUnitId,
+      'ACTIVE_PATROL',
+      '2026-06-02T08:00:00Z'
+    ]);
+
+    // Seed Schedule details
     await db.runAsync(`INSERT INTO schedule (id, date, timeFrom, timeTo, sector, unitId, personnelId) VALUES (?, ?, ?, ?, ?, ?, ?);`, [
-      'sched-today',
-      new Date().toISOString().split('T')[0], // yyyy-MM-dd
+      'e6fcfe10-c0b0-4dbf-8182-b7bc6719ab21',
+      new Date().toISOString().split('T')[0], // today's date dynamically
       '08:00',
       '17:00',
-      'Sector 4 (Intramuros & Ermita Foot Patrol district)',
-      'unit-manila-01',
-      'pnp-badge-7448'
+      'Sector 4 (Intramuros & Ermita - Foot Patrol Area)',
+      mdpUnitId,
+      '9a7bde06-a831-4db3-96b1-096bade8cc12'
     ]);
   }
 

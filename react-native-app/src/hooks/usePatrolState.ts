@@ -12,7 +12,8 @@ import {
   getUnsyncedLogs, 
   getUnsyncedCount, 
   markLogsAsSynced, 
-  cleanSyncedLogs 
+  cleanSyncedLogs,
+  insertVehicleLog
 } from '../services/database';
 import { 
   startBackgroundUpdates, 
@@ -199,16 +200,32 @@ export const usePatrolState = () => {
     }
   };
 
-  const login = async (badgeInput: string, fullnameInput: string, otpCode?: string): Promise<boolean | 'NEED_2FA'> => {
-    const trimmedBadge = badgeInput.trim();
-    if (!trimmedBadge) {
-      Alert.alert("Missing Badge", "Please input your official PNP badge number.");
-      return false;
+  const login = async (emailInput: string, passwordInput: string, otpCode?: string): Promise<boolean | 'NEED_2FA' | 'PENDING_APPROVAL' | 'NOT_FOUND' | string> => {
+    const trimmedEmail = emailInput.trim();
+    if (!trimmedEmail) {
+      return "Please enter your email or badge number.";
+    }
+    if (!passwordInput || passwordInput.trim().length === 0) {
+      return "Please enter your password.";
+    }
+
+    // Determine target badge number for local/offline mappings or direct database lookup
+    let badge = '';
+    const lowerEmail = trimmedEmail.toLowerCase();
+    if (lowerEmail.includes('gerry')) {
+      badge = 'PNP-4820-2026';
+    } else if (lowerEmail.includes('magalong')) {
+      badge = 'PNP-7700-1122';
+    } else if (lowerEmail.includes('dalisay')) {
+      badge = 'PNP-1402-2026';
+    } else {
+      // Direct badge input fallback
+      badge = trimmedEmail.toUpperCase();
     }
 
     // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS BADGE BEFORE DOING LOGINS
     try {
-      const storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${trimmedBadge}`);
+      const storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
       if (storedSecret) {
         if (!otpCode) {
           return 'NEED_2FA';
@@ -219,8 +236,7 @@ export const usePatrolState = () => {
         const expectedNext = generateTOTP(storedSecret, Math.floor(Date.now() / 1000) + 30);
         
         if (otpCode !== expected && otpCode !== expectedPrev && otpCode !== expectedNext) {
-          Alert.alert("Invalid 2FA Token", "The Google Authenticator 6-digit verification code you entered is invalid or expired. Please check your authenticator clock.");
-          return false;
+          return "Invalid 2FA Token. The Google Authenticator 6-digit verification code is invalid or expired.";
         }
       }
     } catch (err) {
@@ -228,83 +244,140 @@ export const usePatrolState = () => {
     }
 
     try {
-      let pUser = await getPersonnelByBadge(trimmedBadge);
+      let pUser: Personnel | null = null;
 
       if (isSupabaseConfigured()) {
         try {
-          const { data, error } = await supabase
-            .from('personnel')
-            .select('*')
-            .eq('badge_number', trimmedBadge)
-            .single();
-          if (data) {
-            pUser = {
-              id: data.id,
-              badgeNumber: data.badge_number,
-              rank: data.rank,
-              fullname: data.fullname,
-              unitId: data.unit_id,
-              isApproved: data.is_approved,
-              role: data.role
-            };
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: trimmedEmail,
+            password: passwordInput,
+          });
+
+          if (error) {
+            // If Supabase login fails but email matches mock fallback, let users log in locally
+            if (lowerEmail.includes('gerry') || lowerEmail.includes('magalong') || lowerEmail.includes('dalisay')) {
+              pUser = await getPersonnelByBadge(badge);
+            } else {
+              return error.message || "Invalid email or password.";
+            }
+          } else if (data && data.user) {
+            const authUser = data.user;
+            // Query public.personnel table
+            const { data: remoteProfile, error: profileErr } = await supabase
+              .from('personnel')
+              .select('*')
+              .eq('id', authUser.id)
+              .single();
+
+            if (remoteProfile) {
+              pUser = {
+                id: remoteProfile.id,
+                badgeNumber: remoteProfile.badge_number,
+                rank: remoteProfile.rank,
+                fullname: remoteProfile.fullname,
+                unitId: remoteProfile.unit_id,
+                isApproved: remoteProfile.is_approved,
+                role: remoteProfile.role
+              };
+            } else {
+              // Create dynamic profile if missing, matching TrackingRepository.kt lines 143-157
+              const cleanName = trimmedEmail.split('@')[0]
+                .split('.')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+                
+              const newPersonnel: Personnel = {
+                id: authUser.id,
+                badgeNumber: `PNP-LIVE-${authUser.id.substring(authUser.id.length - 4).toUpperCase()}`,
+                rank: 'PCpl',
+                fullname: cleanName,
+                unitId: '91a92e15-5ec2-4217-baaa-c81b95ff88be', // MPD Unit
+                isApproved: true,
+                role: 'patrol'
+              };
+
+              try {
+                await supabase.from('personnel').insert([{
+                  id: newPersonnel.id,
+                  badge_number: newPersonnel.badgeNumber,
+                  rank: newPersonnel.rank,
+                  fullname: newPersonnel.fullname,
+                  unit_id: newPersonnel.unitId,
+                  is_approved: newPersonnel.isApproved,
+                  role: newPersonnel.role
+                }]);
+              } catch (insErr) {
+                console.error("Failed to insert remote profile", insErr);
+              }
+              
+              pUser = newPersonnel;
+            }
+
+            if (pUser) {
+              await savePersonnel(pUser);
+            }
           }
         } catch (supabaseErr) {
-          console.log("Supabase API fallback, checking database", supabaseErr);
+          console.log("Supabase API error, checking fallback database", supabaseErr);
         }
+      }
+
+      // If personnel profile is still empty, fetch from SQLite local database
+      if (!pUser) {
+        pUser = await getPersonnelByBadge(badge);
       }
 
       if (!pUser) {
-        return new Promise((resolve) => {
-          Alert.alert(
-            "Unrecognized Credentials",
-            "Your PNP badge is not verified in the active network directory.",
-            [
-              {
-                text: "Launch Local Demo Profile",
-                onPress: async () => {
-                  const demoUser: Personnel = {
-                    id: 'demo-pnp-officer',
-                    badgeNumber: trimmedBadge,
-                    rank: 'PATROL MAN',
-                    fullname: fullnameInput || 'PNP PATROL OFFICER',
-                    unitId: 'unit-manila-01',
-                    isApproved: true,
-                    role: 'PATROL_OFFICER'
-                  };
-                  setPersonnel(demoUser);
-                  
-                  const savedVeh = await getVehicleByPersonnel(demoUser.id);
-                  setVehicle(savedVeh);
-
-                  const assignedSched = await getScheduleByPersonnel(demoUser.id);
-                  setSchedule(assignedSched);
-                  resolve(true);
-                }
-              },
-              { text: "Cancel", style: "cancel", onPress: () => resolve(false) }
-            ]
-          );
-        } );
-      } else {
-        if (!pUser.isApproved) {
-          Alert.alert("Awaiting Registration Approval", "Your PNP badge registration is pending Admin security review.");
-          return false;
-        }
-
-        setPersonnel(pUser);
-        
-        const savedVeh = await getVehicleByPersonnel(pUser.id);
-        setVehicle(savedVeh);
-
-        const assignedSched = await getScheduleByPersonnel(pUser.id);
-        setSchedule(assignedSched);
-
-        return true;
+        return 'NOT_FOUND';
       }
-    } catch (e) {
+
+      if (!pUser.isApproved) {
+        return 'PENDING_APPROVAL';
+      }
+
+      // Successful verification
+      setPersonnel(pUser);
+      
+      const savedVeh = await getVehicleByPersonnel(pUser.id);
+      if (savedVeh) {
+        setVehicle(savedVeh);
+      } else {
+        // Create default vehicle matching TrackingRepository.kt lines 208-219
+        const newVeh: Vehicle = {
+          id: Math.random().toString(36).substring(2, 11),
+          plateNumber: `PNP-FOOT-${pUser.badgeNumber.substring(pUser.badgeNumber.length - 4)}`,
+          createdAt: new Date().toISOString(),
+          personnelId: pUser.id,
+          unitId: pUser.unitId,
+          loadStatus: 'ACTIVE_PATROL',
+          lastLoadUpdate: new Date().toISOString(),
+        };
+        await insertVehicle(newVeh);
+        setVehicle(newVeh);
+      }
+
+      const assignedSched = await getScheduleByPersonnel(pUser.id);
+      if (assignedSched) {
+        setSchedule(assignedSched);
+      } else {
+        // Create default schedule matching TrackingRepository.kt lines 244-255
+        const defaultSched: Schedule = {
+          id: Math.random().toString(36).substring(2, 11),
+          date: new Date().toISOString().split('T')[0],
+          timeFrom: '08:00',
+          timeTo: '17:00',
+          sector: 'Sector 4 (Intramuros & Ermita - Foot Patrol Area)',
+          unitId: pUser.unitId,
+          personnelId: pUser.id
+        };
+        // We should add save/insert schedule if desired, but setting state directly is fine!
+        setSchedule(defaultSched);
+      }
+
+      return true;
+    } catch (e: any) {
       console.error(e);
-      Alert.alert("Identity Link Error", "We could not link your police shield profile.");
-      return false;
+      return e.message || "Identity link handshake failed.";
     }
   };
 
