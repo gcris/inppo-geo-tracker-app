@@ -17,6 +17,7 @@ interface LoginViewProps {
   onLogin: (email: string, password: string, otpCode?: string) => Promise<boolean | 'NEED_2FA' | 'PENDING_APPROVAL' | 'NOT_FOUND' | string>;
   onOpenSettings: () => void;
   isDarkTheme: boolean;
+  onToggleTheme: () => void;
 }
 
 export const LoginView = ({ 
@@ -24,14 +25,15 @@ export const LoginView = ({
   gpsLoading, 
   onLogin, 
   onOpenSettings,
-  isDarkTheme
+  isDarkTheme,
+  onToggleTheme
 }: LoginViewProps) => {
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
 
-  // Default preloaded credentials for Sgt. Cariaga matching the native app
-  const [email, setEmail] = useState('officer.gerry@pnp.gov.ph');
-  const [password, setPassword] = useState('password123');
+  // Default preloaded credentials for PCpl Cariaga matching the native Android app exactly
+  const [email, setEmail] = useState('itsme.gerrycriscariaga@gmail.com');
+  const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
   const [otp, setOtp] = useState('');
@@ -40,6 +42,8 @@ export const LoginView = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingState, setPendingState] = useState(false);
   const [notFoundState, setNotFoundState] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(false);
@@ -99,290 +103,513 @@ export const LoginView = ({
     }
   };
 
+  const emailBorderColor = emailFocused 
+    ? (isDarkTheme ? '#FACC15' : '#1E3A8A') 
+    : (isDarkTheme ? '#1E293B' : '#E2E8F0');
+    
+  const passwordBorderColor = passwordFocused 
+    ? (isDarkTheme ? '#FACC15' : '#1E3A8A') 
+    : (isDarkTheme ? '#1E293B' : '#E2E8F0');
+
   return (
     <ScrollView 
       style={styles.container}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { position: 'relative', minHeight: '100%', justifyContent: 'center' }]}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.headerSpacer} />
-      
-      {/* Dynamic Radar Sweeps behind the badge inside branding, mirroring Compose radar crosshairs */}
-      <View style={styles.brandingBox}>
-        <View style={styles.badgeShieldIcon}>
-          <Text style={styles.badgeHeroText}>👮</Text>
-        </View>
-        <Text style={styles.pnpTitle}>PHILIPPINE NATIONAL POLICE</Text>
-        <Text style={styles.pnpSubTitle}>GRID-WIDE PATROL TELEMETRY PLATFORM</Text>
+      {/* Floating Theme Switcher top right - matches Native Compose */}
+      <TouchableOpacity
+        onPress={onToggleTheme}
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF',
+          borderWidth: 1,
+          borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 99,
+        }}
+        activeOpacity={0.7}
+      >
+        <Text style={{ fontSize: 18 }}>{isDarkTheme ? "☀️" : "🌙"}</Text>
+      </TouchableOpacity>
+
+      {/* Aesthetic Radar Grid Lines in background - matches Native Compose Canvas */}
+      <View style={{
+        position: 'absolute',
+        top: 0, right: 0, left: 0, bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: -1,
+        opacity: 0.4,
+      }} pointerEvents="none">
+        {/* Circle 1 */}
+        <View style={{
+          position: 'absolute',
+          width: 150,
+          height: 150,
+          borderRadius: 75,
+          borderWidth: 1.5,
+          borderColor: isDarkTheme ? '#142035' : '#94A3B8',
+        }} />
+        {/* Circle 2 */}
+        <View style={{
+          position: 'absolute',
+          width: 300,
+          height: 300,
+          borderRadius: 150,
+          borderWidth: 1.2,
+          borderColor: isDarkTheme ? '#142035' : '#94A3B8',
+        }} />
+        {/* Circle 3 */}
+        <View style={{
+          position: 'absolute',
+          width: 450,
+          height: 450,
+          borderRadius: 225,
+          borderWidth: 1,
+          borderColor: isDarkTheme ? '#142035' : '#94A3B8',
+        }} />
+        {/* Crosshairs */}
+        <View style={{
+          position: 'absolute',
+          width: '100%',
+          height: 1,
+          backgroundColor: isDarkTheme ? 'rgba(20,32,53,0.2)' : 'rgba(148,163,184,0.2)',
+        }} />
+        <View style={{
+          position: 'absolute',
+          width: 1,
+          height: '100%',
+          backgroundColor: isDarkTheme ? 'rgba(20,32,53,0.2)' : 'rgba(148,163,184,0.2)',
+        }} />
       </View>
 
-      {/* Dynamic feedback banners precisely mirroring native Android app */}
-      {pendingState && (
-        <View style={[styles.gpsErrorBox, { borderColor: '#EF4444', backgroundColor: isDarkTheme ? '#3A1416' : '#FEF2F2', marginBottom: 16 }]}>
-          <Text style={[styles.gpsErrorTitle, { color: '#EF4444' }]}>⚠️ MEMBERSHIP RESTRICTED</Text>
-          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FCA5A5' : '#991B1B' }]}>
-            Your shield credentials (Pat. Cardo Dalisay) are in administrative queue pending commander authorization. Live telemetry locks are active.
-          </Text>
+      <View style={{ width: '100%', alignItems: 'center', paddingVertical: 10 }}>
+        {/* PNP Gold Emblem Representation */}
+        <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+          <View style={{
+            width: 80,
+            height: 94,
+            backgroundColor: '#1E3A8A', // PnpNavyPrimary
+            borderWidth: 3.5,
+            borderColor: '#FACC15', // PnpGoldAccent
+            borderRadius: 20,
+            borderBottomLeftRadius: 40,
+            borderBottomRightRadius: 40,
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#FACC15',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: isDarkTheme ? 0.35 : 0.15,
+            shadowRadius: 6,
+            elevation: 5,
+          }}>
+            {/* Centered Golden Star */}
+            <Text style={{ fontSize: 36, color: '#FACC15', position: 'absolute', top: 12 }}>⭐</Text>
+            {/* Central core circle */}
+            <View style={{
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              backgroundColor: '#0B121F',
+              justifyContent: 'center',
+              alignItems: 'center',
+              position: 'absolute',
+              bottom: 18,
+            }}>
+              <View style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: '#10B981',
+              }} />
+            </View>
+          </View>
         </View>
-      )}
 
-      {notFoundState && (
-        <View style={[styles.gpsErrorBox, { borderColor: '#F59E0B', backgroundColor: isDarkTheme ? '#2C1E14' : '#FFFBEB', marginBottom: 16 }]}>
-          <Text style={[styles.gpsErrorTitle, { color: '#D97706' }]}>⚠️ UNRECOGNIZED SHIELD IDENTITY</Text>
-          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FDE68A' : '#92400E' }]}>
-            The entered email or badge credentials are not linked in the active directory. Please verify with the base dispatch roster.
-          </Text>
-        </View>
-      )}
+        <Text style={[styles.pnpTitle, { color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontWeight: 'bold', fontSize: 16, letterSpacing: 2, textAlign: 'center' }]}>
+          PHILIPPINE NATIONAL POLICE
+        </Text>
+        <Text style={{ fontSize: 11, color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', marginTop: 4, letterSpacing: 0.5, textAlign: 'center' }}>
+          Geo Tracker • Foot Patrol Management
+        </Text>
 
-      {errorMessage && (
-        <View style={[styles.gpsErrorBox, { borderColor: '#EF4444', backgroundColor: isDarkTheme ? '#3A1416' : '#FEF2F2', marginBottom: 16 }]}>
-          <Text style={[styles.gpsErrorTitle, { color: '#EF4444' }]}>⚠️ IDENTITY LINK CONFLICT</Text>
-          <Text style={[styles.gpsErrorMessage, { color: isDarkTheme ? '#FCA5A5' : '#991B1B' }]}>
-            {errorMessage}
-          </Text>
-        </View>
-      )}
+        <View style={{ height: 32 }} />
 
-      {step === 'credentials' ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardHeader}>OFFICER IDENTITY LINK</Text>
-          
-          <Text style={styles.inputLabel}>OFFICIAL MAIL ADDRESS / ASSIGNED EMAIL</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={(t) => {
-              setEmail(t);
-              setErrorMessage(null);
-              setPendingState(false);
-              setNotFoundState(false);
-            }}
-            placeholder="e.g. officer.gerry@pnp.gov.ph"
-            placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={styles.inputLabel}>OFFICER ACCESS KEY / SECURE PASSWORD</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={[styles.input, { paddingRight: 60 }]}
-              value={password}
-              onChangeText={(t) => {
-                setPassword(t);
-                setErrorMessage(null);
-                setPendingState(false);
-                setNotFoundState(false);
-              }}
-              placeholder="••••••••"
-              placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-              secureTextEntry={!passwordVisible}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+        {/* GPS ALERT BAR IF DISABLED */}
+        {!isGpsEnabled && (
+          <View style={{
+            width: '100%',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            borderWidth: 1,
+            borderColor: '#EF4444',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+            alignItems: 'center',
+          }}>
+            <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 14 }}>⚠️ DEVICE GPS IS DISABLED</Text>
+            <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#151515', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+              PNP Geo-Tracking requires high-accuracy system GPS services to be enabled globally. Please turn on Location/GPS below.
+            </Text>
             <TouchableOpacity 
-              style={styles.inputPasswordToggle}
-              onPress={() => setPasswordVisible(!passwordVisible)}
-              activeOpacity={0.7}
+              onPress={onOpenSettings}
+              style={{ backgroundColor: '#EF4444', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, marginTop: 12 }}
             >
-              <Text style={styles.inputPasswordToggleText}>
-                {passwordVisible ? "HIDE" : "SHOW"}
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>ENABLE DEVICE LOCATION</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {step === 'credentials' ? (
+          <View style={[styles.formCard, { width: '100%', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF' }]}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', letterSpacing: 1, textAlign: 'center', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+              SECURE OFFICER SIGN IN
+            </Text>
+            <Text style={{ fontSize: 11, color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', textAlign: 'center', marginVertical: 12, lineHeight: 16 }}>
+              Access live databases via official Supabase email Authentication credentials.
+            </Text>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', marginBottom: 6 }}>Email Address</Text>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isDarkTheme ? 'rgba(15,23,42,0.3)' : 'rgba(241,245,249,0.3)',
+              borderRadius: 12,
+              borderWidth: 1.5,
+              borderColor: emailBorderColor,
+              paddingHorizontal: 12,
+              marginBottom: 16,
+              height: 52,
+            }}>
+              <Text style={{ fontSize: 16, marginRight: 8 }}>✉️</Text>
+              <TextInput
+                style={{ flex: 1, color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 14 }}
+                value={email}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  setErrorMessage(null);
+                  setPendingState(false);
+                  setNotFoundState(false);
+                }}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+                placeholder="officer@pnp.gov.ph"
+                placeholderTextColor="rgba(148,163,184,0.6)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', marginBottom: 6 }}>Secret Password</Text>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isDarkTheme ? 'rgba(15,23,42,0.3)' : 'rgba(241,245,249,0.3)',
+              borderRadius: 12,
+              borderWidth: 1.5,
+              borderColor: passwordBorderColor,
+              paddingHorizontal: 12,
+              marginBottom: 24,
+              height: 52,
+            }}>
+              <Text style={{ fontSize: 16, marginRight: 8 }}>🔒</Text>
+              <TextInput
+                style={{ flex: 1, color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 14 }}
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  setErrorMessage(null);
+                  setPendingState(false);
+                  setNotFoundState(false);
+                }}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
+                placeholder="Secret Password"
+                placeholderTextColor="rgba(148,163,184,0.6)"
+                secureTextEntry={!passwordVisible}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setPasswordVisible(!passwordVisible)}>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#FACC15' : '#1E3A8A' }}>
+                  {passwordVisible ? "HIDE" : "SHOW"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={{
+                backgroundColor: isDarkTheme ? '#FACC15' : '#1E3A8A',
+                borderRadius: 12,
+                height: 50,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color={isDarkTheme ? '#0B121F' : '#FFFFFF'} />
+              ) : (
+                <Text style={{ color: isDarkTheme ? '#0B121F' : '#FFFFFF', fontWeight: 'bold', fontSize: 15 }}>
+                  Sign In & Establish Duty
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Render demo account helpers */}
+            <View style={{ marginTop: 20, borderTopWidth: 0.5, borderTopColor: isDarkTheme ? '#1E293B' : '#E2E8F0', paddingTop: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: isDarkTheme ? '#FACC15' : '#1E3A8A', marginBottom: 6 }}>SIMULATION PROFILES:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                <TouchableOpacity 
+                  style={{ backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                  onPress={() => {
+                    setEmail('itsme.gerrycriscariaga@gmail.com');
+                    setPassword('password123');
+                    setPendingState(false);
+                    setNotFoundState(false);
+                    setErrorMessage(null);
+                  }}
+                >
+                  <Text style={{ fontSize: 9, fontWeight: 'bold', color: isDarkTheme ? '#F8FAFC' : '#0F172A' }}>PCpl Cariaga (Active)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                  onPress={() => {
+                    setEmail('commander.magalong@pnp.gov.ph');
+                    setPassword('magalong7700');
+                    setPendingState(false);
+                    setNotFoundState(false);
+                    setErrorMessage(null);
+                  }}
+                >
+                  <Text style={{ fontSize: 9, fontWeight: 'bold', color: isDarkTheme ? '#F8FAFC' : '#0F172A' }}>PMSg Magalong (Active)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
+                  onPress={() => {
+                    setEmail('patrol.dalisay@pnp.gov.ph');
+                    setPassword('dalisay1402');
+                    setPendingState(false);
+                    setNotFoundState(false);
+                    setErrorMessage(null);
+                  }}
+                >
+                  <Text style={{ fontSize: 9, fontWeight: 'bold', color: isDarkTheme ? '#F8FAFC' : '#0F172A' }}>Pat. Dalisay (Pending)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.formCard, { width: '100%', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF' }]}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', letterSpacing: 1, textAlign: 'center', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+              👮 MFA SECURE CHALLENGE
+            </Text>
+            
+            <View style={{
+              backgroundColor: isDarkTheme ? '#1E293B' : '#DBEAFE',
+              padding: 10,
+              borderRadius: 6,
+              marginVertical: 12,
+              borderWidth: 1,
+              borderColor: isDarkTheme ? '#334155' : '#BFDBFE',
+              alignItems: 'center',
+            }}>
+              <Text style={{ color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontSize: 11, fontWeight: 'bold' }}>
+                🔐 GOOGLE AUTHENTICATOR IS ACTIVE
+              </Text>
+            </View>
+   
+            <Text style={{
+              color: isDarkTheme ? '#94A3B8' : '#475569',
+              fontSize: 12,
+              textAlign: 'center',
+              lineHeight: 18,
+              marginBottom: 16,
+            }}>
+              Your badge profile is protected with Two-Factor Identification. Enter the current 6-digit code from Google Authenticator to join active patrol shift status.
+            </Text>
+
+            {mfaSecret ? (
+              <View style={{
+                backgroundColor: isDarkTheme ? '#0B121F' : '#F8FAFC',
+                padding: 12,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                marginBottom: 16,
+                alignItems: 'center'
+              }}>
+                <Text style={{ color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 }}>
+                  GOOGLE AUTHENTICATOR SETUP KEY
+                </Text>
+                <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 1 }}>
+                  {mfaSecret}
+                </Text>
+                <TouchableOpacity 
+                  style={{
+                    backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                    paddingVertical: 5,
+                    paddingHorizontal: 12,
+                    borderRadius: 4,
+                    marginTop: 8,
+                    borderColor: isDarkTheme ? '#334155' : '#CBD5E1',
+                    borderWidth: 1
+                  }}
+                  onPress={() => {
+                    Clipboard.setString(mfaSecret);
+                    Alert.alert("Secret Copied", "Google Authenticator secret copied to device clipboard. Standard key input type inside your device Authenticator app.");
+                  }}
+                >
+                  <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 10, fontWeight: 'bold' }}>
+                    📋 COPY SETUP KEY
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', marginBottom: 6, textAlign: 'center' }}>
+              SIX-DIGIT SECURITY TOKEN
+            </Text>
+            <TextInput
+              style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold', marginBottom: 16 }]}
+              value={otp}
+              onChangeText={(v) => setOtp(v.replace(/[^0-9]/g, '').substring(0, 6))}
+              placeholder="000000"
+              placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#10B981',
+                borderRadius: 12,
+                height: 50,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: 12,
+              }} 
+              onPress={handleVerifyOtp} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 }}>VERIFY & ACCESS SYSTEMS</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{ 
+                alignItems: 'center', 
+                paddingVertical: 12, 
+                borderWidth: 1,
+                borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                borderRadius: 12,
+              }} 
+              onPress={() => {
+                setOtp('');
+                setStep('credentials');
+              }}
+            >
+              <Text style={{ color: isDarkTheme ? '#94A3B8' : '#475569', fontSize: 13, fontWeight: 'bold' }}>
+                ◀ GO BACK TO SHIELD HEADER
               </Text>
             </TouchableOpacity>
           </View>
+        )}
 
-          {/* Render demo account helpers exactly matching Compose layout triggers */}
-          <View style={{ marginTop: 16, borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 12 }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accentAmber, marginBottom: 6 }}>SIMULATION PROFILES (ROSTER VERIFIED):</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <TouchableOpacity 
-                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
-                onPress={() => {
-                  setEmail('officer.gerry@pnp.gov.ph');
-                  setPassword('password123');
-                  setPendingState(false);
-                  setNotFoundState(false);
-                  setErrorMessage(null);
-                }}
-              >
-                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>PCpl Cariaga (Active)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
-                onPress={() => {
-                  setEmail('commander.magalong@pnp.gov.ph');
-                  setPassword('magalong7700');
-                  setPendingState(false);
-                  setNotFoundState(false);
-                  setErrorMessage(null);
-                }}
-              >
-                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>PMSg Magalong (Active)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={{ backgroundColor: colors.borderBlue, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }}
-                onPress={() => {
-                  setEmail('patrol.dalisay@pnp.gov.ph');
-                  setPassword('dalisay1402');
-                  setPendingState(false);
-                  setNotFoundState(false);
-                  setErrorMessage(null);
-                }}
-              >
-                <Text style={{ fontSize: 9, fontWeight: 'bold', color: colors.blackText }}>Pat. Dalisay (Pending)</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {!isGpsEnabled && (
-            <View style={styles.gpsErrorBox}>
-              <Text style={styles.gpsErrorTitle}>⚠️ SYSTEM GPS CONFLICT</Text>
-              <Text style={styles.gpsErrorMessage}>
-                PNP Geo-Tracking requires high-accuracy system GPS services to be enabled globally. Please turn on Location/GPS below.
-              </Text>
-              <TouchableOpacity 
-                style={styles.gpsButtonSmall} 
-                onPress={onOpenSettings} 
-                disabled={gpsLoading}
-              >
-                <Text style={styles.gpsButtonText}>
-                  {gpsLoading ? "WAITING FOR GPS..." : "ACTIVATE HARDWARE GPS"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <TouchableOpacity 
-            style={styles.submitBtn} 
-            onPress={handleSubmit} 
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={isDarkTheme ? '#0B121F' : '#FFFFFF'} />
-            ) : (
-              <Text style={styles.submitBtnText}>SECURE IDENTITY HANDSHAKE</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.formCard}>
-          <Text style={styles.cardHeader}>👮 MFA SECURE CHALLENGE</Text>
-          
-          <Text style={{
-            color: '#1E3A8A',
-            fontSize: 12,
-            fontWeight: 'bold',
-            textAlign: 'center',
-            backgroundColor: '#DBEAFE',
-            padding: 10,
-            borderRadius: 6,
-            marginTop: 12,
-            marginBottom: 12,
+        {/* FEEDBACK STATUS STATE BANNERS - EXACT MIRROR OF COMPOSE EXPLICIT CARDS */}
+        {loading && (
+          <View style={{
+            width: '100%',
+            backgroundColor: isDarkTheme ? 'rgba(20,32,53,0.95)' : 'rgba(255,255,255,0.95)',
             borderWidth: 1,
-            borderColor: '#BFDBFE',
+            borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            alignItems: 'center',
           }}>
-            🔐 GOOGLE AUTHENTICATOR IS ACTIVE
-          </Text>
- 
-          <Text style={{
-            color: colors.textSecondary,
-            fontSize: 12,
-            textAlign: 'center',
-            lineHeight: 18,
-            marginBottom: 16,
-          }}>
-            Your badge profile is protected with Two-Factor Identification. Enter the current 6-digit code from Google Authenticator to join active patrol shift status.
-          </Text>
-
-          {mfaSecret ? (
-            <View style={{
-              backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF',
-              padding: 12,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: colors.borderBlue || '#3B82F6',
-              marginBottom: 16,
-              alignItems: 'center'
-            }}>
-              <Text style={{ color: colors.accentAmber, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 }}>
-                GOOGLE AUTHENTICATOR SETUP KEY
-              </Text>
-              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 1 }}>
-                {mfaSecret}
-              </Text>
-              <TouchableOpacity 
-                style={{
-                  backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
-                  paddingVertical: 5,
-                  paddingHorizontal: 12,
-                  borderRadius: 4,
-                  marginTop: 8,
-                  borderColor: colors.borderBlue,
-                  borderWidth: 1
-                }}
-                onPress={() => {
-                  Clipboard.setString(mfaSecret);
-                  Alert.alert("Secret Copied", "Google Authenticator secret copied to device clipboard. Standard key input type inside your device Authenticator app.");
-                }}
-              >
-                <Text style={{ color: colors.textPrimary, fontSize: 10, fontWeight: 'bold' }}>
-                  📋 COPY SETUP KEY
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          <Text style={styles.inputLabel}>SIX-DIGIT SECURITY TOKEN</Text>
-          <TextInput
-            style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold' }]}
-            value={otp}
-            onChangeText={(v) => setOtp(v.replace(/[^0-9]/g, '').substring(0, 6))}
-            placeholder="000 000"
-            placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-            keyboardType="number-pad"
-            maxLength={6}
-          />
-
-          <TouchableOpacity 
-            style={[styles.submitBtn, { backgroundColor: '#10B981' }]} 
-            onPress={handleVerifyOtp} 
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={[styles.submitBtnText, { color: '#FFFFFF' }]}>VERIFY & ACCESS SYSTEMS</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={{ 
-              alignItems: 'center', 
-              paddingVertical: 12, 
-              marginTop: 12,
-              borderWidth: 1,
-              borderColor: colors.borderBlue,
-              borderRadius: 6,
-            }} 
-            onPress={() => {
-              setOtp('');
-              setStep('credentials');
-            }}
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: 'bold' }}>
-              ◀ GO BACK TO SHIELD HEADER
+            <ActivityIndicator color={isDarkTheme ? '#FACC15' : '#1E3A8A'} />
+            <Text style={{ fontSize: 12, color: isDarkTheme ? '#FFFFFF' : '#0F172A', marginTop: 8 }}>
+              Establishing Supabase session & syncing...
             </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+          </View>
+        )}
 
-      <View style={styles.disclaimerContainer}>
-        <Text style={styles.disclaimerHead}>LAW ENFORCEMENT REGULATIONS STATEMENT</Text>
-        <Text style={styles.disclaimerText}>
-          All geographic locations and walking patterns mapped are signed with military-grade keys and logged locally inside SECURE SQLite database for auditing. False data submission is heavily penalized.
-        </Text>
+        {pendingState && (
+          <View style={{
+            width: '100%',
+            backgroundColor: isDarkTheme ? 'rgba(20,32,53,0.95)' : 'rgba(255,255,255,0.95)',
+            borderWidth: 1,
+            borderColor: '#1E3A8A',
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 28, color: isDarkTheme ? '#FACC15' : '#1E3A8A' }}>🔒</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: isDarkTheme ? '#FACC15' : '#1E3A8A', marginTop: 8 }}>
+              MEMBERSHIP RESTRICTED
+            </Text>
+            <Text style={{ fontSize: 12, color: isDarkTheme ? '#94A3B8' : '#475569', textAlign: 'center', marginTop: 4, lineHeight: 16 }}>
+              Badge [PNP-4820-2026] found for Officer "Gerry Cris Cariaga". However, status is marked as PENDING APPROVAL. Please trigger unit supervisor approval in Supabase panel to enable shifts.
+            </Text>
+          </View>
+        )}
+
+        {notFoundState && (
+          <View style={{
+            width: '100%',
+            backgroundColor: isDarkTheme ? 'rgba(20, 32, 53, 0.95)' : 'rgba(255,255,255,0.95)',
+            borderWidth: 1,
+            borderColor: '#EF4444',
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 28, color: '#EF4444' }}>⚠️</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#EF4444', marginTop: 8 }}>
+              CREDENTIALS NOT MATCHED
+            </Text>
+            <Text style={{ fontSize: 12, color: isDarkTheme ? '#94A3B8' : '#475569', textAlign: 'center', marginTop: 4, lineHeight: 16 }}>
+              Entered credentials are not matched in database. For fast demo testing, try signing in with dynamic email/pass.
+            </Text>
+          </View>
+        )}
+
+        {errorMessage && errorMessage !== 'NEED_2FA' && !errorMessage.startsWith('NEED_2FA_SECRET:') && (
+          <View style={{
+            width: '100%',
+            backgroundColor: isDarkTheme ? 'rgba(20, 32, 53, 0.95)' : 'rgba(255,255,255,0.95)',
+            borderWidth: 1,
+            borderColor: '#EF4444',
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 28, color: '#EF4444' }}>⚠️</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#EF4444', marginTop: 8 }}>
+              CONNECTION ERROR
+            </Text>
+            <Text style={{ fontSize: 12, color: isDarkTheme ? '#94A3B8' : '#475569', textAlign: 'center', marginTop: 4, lineHeight: 16 }}>
+              {errorMessage}
+            </Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );

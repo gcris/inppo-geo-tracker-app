@@ -56,6 +56,7 @@ export default function App() {
           onLogin={login}
           onOpenSettings={openSystemSettings}
           isDarkTheme={isDarkTheme}
+          onToggleTheme={handleToggleTheme}
         />
       </SafeAreaView>
     );
