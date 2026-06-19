@@ -14,11 +14,36 @@ interface PersonnelDao {
     @Query("SELECT * FROM personnel WHERE id = :id")
     suspend fun getPersonnel(id: String): PersonnelEntity?
 
-    @Query("SELECT * FROM personnel WHERE badgeNumber = :badgeNumber LIMIT 1")
+    @Query("SELECT * FROM personnel WHERE (badgeNumber = :badgeNumber OR rank_id = :badgeNumber) LIMIT 1")
     suspend fun getPersonnelByBadge(badgeNumber: String): PersonnelEntity?
+
+    @Query("SELECT * FROM personnel WHERE email = :email LIMIT 1")
+    suspend fun getPersonnelByEmail(email: String): PersonnelEntity?
+
+    @Query("""
+        SELECT * FROM personnel 
+        WHERE (UPPER(badgeNumber) = UPPER(:badgeNumber)) 
+          AND (LOWER(rank) = LOWER(:rankId) OR LOWER(rank_id) = LOWER(:rankId)) 
+          AND (LOWER(unitId) = LOWER(:unitId) OR LOWER(unit_id) = LOWER(:unitId)) 
+          AND LOWER(designation) = LOWER(:designation) 
+        LIMIT 1
+    """)
+    suspend fun findCandidatePersonnel(badgeNumber: String, rankId: String, unitId: String, designation: String): PersonnelEntity?
 
     @Query("SELECT * FROM personnel")
     fun getAllPersonnelFlow(): Flow<List<PersonnelEntity>>
+}
+
+@Dao
+interface RankDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRank(rank: RankEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(ranks: List<RankEntity>)
+
+    @Query("SELECT * FROM rank ORDER BY rankName ASC")
+    suspend fun getAllRanks(): List<RankEntity>
 }
 
 @Dao

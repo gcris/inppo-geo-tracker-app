@@ -20,6 +20,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.DashboardScreen
 import com.example.ui.LoginScreen
+import com.example.ui.RegisterScreen
+import com.example.ui.ViewMode
 import com.example.ui.MainViewModel
 import com.example.ui.theme.MyApplicationTheme
 import com.google.android.gms.common.api.ResolvableApiException
@@ -101,17 +103,26 @@ class MainActivity : ComponentActivity() {
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
                 val currentPersonnel by vm.currentPersonnel.collectAsState()
+                val viewMode by vm.viewMode.collectAsState()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
                     if (currentPersonnel == null) {
-                        LoginScreen(
-                            viewModel = vm,
-                            onEnableLocation = { checkAndRequestLocationSettings() },
-                            onRequestPermissions = { requestOperationalPermissions() },
-                            modifier = Modifier.padding(innerPadding)
-                        )
+                        if (viewMode == ViewMode.LOGIN) {
+                            LoginScreen(
+                                viewModel = vm,
+                                onEnableLocation = { checkAndRequestLocationSettings() },
+                                onRequestPermissions = { requestOperationalPermissions() },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        } else {
+                            RegisterScreen(
+                                viewModel = vm,
+                                onBackToLogin = { vm.navigateToLogin() },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
                     } else {
                         DashboardScreen(
                             viewModel = vm,

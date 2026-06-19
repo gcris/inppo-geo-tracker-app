@@ -26,6 +26,7 @@ class TrackingRepository(private val context: Context) {
     private val db = AppDatabase.getDatabase(context)
     private val personnelDao = db.personnelDao()
     private val unitDao = db.unitDao()
+    private val rankDao = db.rankDao()
     private val vehicleDao = db.vehicleDao()
     private val vehicleLogDao = db.vehicleLogDao()
     private val scheduleDao = db.scheduleDao()
@@ -79,13 +80,37 @@ class TrackingRepository(private val context: Context) {
         if (!SupabaseClient.isSupabaseConfigured()) {
             // Local fallback for offline/preview testing when Supabase keys are not set
             val lowerEmail = trimmedEmail.lowercase(Locale.US)
-            val matchedBadge = when {
-                lowerEmail.contains("gerry") -> "PNP-4820-2026"
-                lowerEmail.contains("magalong") -> "PNP-7700-1122"
-                lowerEmail.contains("dalisay") -> "PNP-1402-2026"
-                else -> "PNP-4820-2026" // Default mock
+            val localPersonnel = personnelDao.getPersonnelByEmail(lowerEmail)
+            if (localPersonnel != null) {
+                val dbPassword = localPersonnel.password ?: "password123"
+                if (dbPassword != trimmedPassword) {
+                    return@withContext LoginResult.Error("Incorrect password.")
+                }
+                return@withContext loginWithBadge(localPersonnel.badgeNumber)
             }
-            return@withContext loginWithBadge(matchedBadge)
+
+            val matchedBadge = when {
+                lowerEmail.contains("gerry") || lowerEmail.equals("itsme.gerrycriscariaga@gmail.com") -> "PNP-4820-2026"
+                lowerEmail.contains("magalong") || lowerEmail.equals("magalong@pnp.gov.ph") -> "PNP-7700-1122"
+                lowerEmail.contains("dalisay") || lowerEmail.equals("cardalisay@pnp.gov.ph") -> "PNP-1402-2026"
+                else -> null
+            }
+            if (matchedBadge != null) {
+                val personnel = personnelDao.getPersonnelByBadge(matchedBadge)
+                if (personnel != null) {
+                    val expectedPassword = when (matchedBadge) {
+                        "PNP-7700-1122" -> "magalong7700"
+                        "PNP-1402-2026" -> "dalisay1402"
+                        else -> "password123"
+                    }
+                    if (trimmedPassword != expectedPassword) {
+                        return@withContext LoginResult.Error("Incorrect password for seeded account.")
+                    }
+                    return@withContext loginWithBadge(matchedBadge)
+                }
+            }
+
+            return@withContext LoginResult.NotFound
         }
 
         val api = SupabaseClient.api
@@ -528,7 +553,14 @@ class TrackingRepository(private val context: Context) {
             // Seed Police Unit
             val mdpUnitId = "91a92e15-5ec2-4217-baaa-c81b95ff88be"
             val mpdUnit = UnitEntity(mdpUnitId, "Manila Police District (MPD)")
+            val qcpdUnit = UnitEntity("92b005fe-1429-4654-8e12-32b005fe1429", "Quezon City Police District (QCPD)")
             unitDao.insertUnit(mpdUnit)
+            unitDao.insertUnit(qcpdUnit)
+
+            // Seed Ranks
+            rankDao.insertRank(RankEntity("Pat", "Patrolman"))
+            rankDao.insertRank(RankEntity("PCpl", "Police Corporal"))
+            rankDao.insertRank(RankEntity("PMSg", "Police Master Sergeant"))
 
             // Seed personnel
             val personnelList = listOf(
@@ -539,7 +571,14 @@ class TrackingRepository(private val context: Context) {
                     fullname = "Gerry Cris Cariaga",
                     unitId = mdpUnitId,
                     isApproved = true,
-                    role = "patrol"
+                    role = "patrol",
+                    email = "itsme.gerrycriscariaga@gmail.com",
+                    password = "password123",
+                    rank_id = "PCpl",
+                    unit_id = mdpUnitId,
+                    designation = "Patrol Officer",
+                    phone_number = "+639123456789",
+                    viber_number = "+639123456789"
                 ),
                 PersonnelEntity(
                     id = "51bbaee6-d70b-4654-8e12-32b005fe1429",
@@ -548,7 +587,14 @@ class TrackingRepository(private val context: Context) {
                     fullname = "Benjamin Magalong",
                     unitId = mdpUnitId,
                     isApproved = true,
-                    role = "commander"
+                    role = "commander",
+                    email = "magalong@pnp.gov.ph",
+                    password = "magalong7700",
+                    rank_id = "PMSg",
+                    unit_id = mdpUnitId,
+                    designation = "Sector Commander",
+                    phone_number = "+639876543210",
+                    viber_number = "+639876543210"
                 ),
                 PersonnelEntity(
                     id = "e5bcfe10-ea9e-4ebf-8182-cdcba93ea210",
@@ -557,7 +603,14 @@ class TrackingRepository(private val context: Context) {
                     fullname = "Cardo Dalisay",
                     unitId = mdpUnitId,
                     isApproved = false, // PENDING APPROVED STATE demo
-                    role = "patrol"
+                    role = "patrol",
+                    email = "cardalisay@pnp.gov.ph",
+                    password = "dalisay1402",
+                    rank_id = "Pat",
+                    unit_id = mdpUnitId,
+                    designation = "Patrol Patrolman",
+                    phone_number = "+639111222333",
+                    viber_number = "+639111222333"
                 )
             )
             personnelDao.insertAll(personnelList)
@@ -587,6 +640,44 @@ class TrackingRepository(private val context: Context) {
             scheduleDao.insertSchedule(schedule)
             Log.d("TrackingRepository", "PNP local database seeding completed successfully.")
         }
+    }
+
+    suspend fun getRanks(): List<RankEntity> = withContext(Dispatchers.IO) {
+        rankDao.getAllRanks()
+    }
+
+    suspend fun getUnits(): List<UnitEntity> = withContext(Dispatchers.IO) {
+        unitDao.getAllUnits()
+    }
+
+    suspend fun findCandidatePersonnel(
+        badgeNumber: String,
+        rankId: String,
+        unitId: String,
+        designation: String
+    ): PersonnelEntity? = withContext(Dispatchers.IO) {
+        personnelDao.findCandidatePersonnel(badgeNumber, rankId, unitId, designation)
+    }
+
+    suspend fun registerPersonnel(
+        id: String,
+        email: String,
+        passwordCheck: String,
+        fullname: String,
+        phoneNumber: String,
+        viberNumber: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val existing = personnelDao.getPersonnel(id) ?: return@withContext false
+        val updated = existing.copy(
+            email = email,
+            password = passwordCheck,
+            fullname = fullname,
+            phone_number = phoneNumber,
+            viber_number = viberNumber,
+            isApproved = false // Pending approval by administrator
+        )
+        personnelDao.insertPersonnel(updated)
+        true
     }
 
     // Network availability checks (Wifi vs Data)

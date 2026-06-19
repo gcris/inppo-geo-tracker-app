@@ -410,6 +410,32 @@ fun LoginScreen(
                             )
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = { viewModel.navigateToRegister() },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isDarkTheme) PnpGoldAccent else PnpNavyPrimary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = if (isDarkTheme) PnpGoldAccent else PnpNavyPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("register_navigation_button")
+                    ) {
+                        Text(
+                            text = "Register PNP Profile",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        )
+                    }
                 }
             }
 

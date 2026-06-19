@@ -9,16 +9,18 @@ import androidx.room.RoomDatabase
     entities = [
         PersonnelEntity::class,
         UnitEntity::class,
+        RankEntity::class,
         VehicleEntity::class,
         VehicleLogEntity::class,
         ScheduleEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun personnelDao(): PersonnelDao
     abstract fun unitDao(): UnitDao
+    abstract fun rankDao(): RankDao
     abstract fun vehicleDao(): VehicleDao
     abstract fun vehicleLogDao(): VehicleLogDao
     abstract fun scheduleDao(): ScheduleDao

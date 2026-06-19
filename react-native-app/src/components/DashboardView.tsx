@@ -8,11 +8,13 @@ import {
   Switch,
   Clipboard,
   Alert,
-  Image
+  Image,
+  TextInput
 } from 'react-native';
 import { Personnel, Vehicle, VehicleLog, Schedule } from '../types';
 import { getStyles, getThemeColors } from '../theme/styles';
 import { generateRandomSecret, getOTPAuthUri } from '../services/totp';
+import { enrollMFA } from '../services/supabaseMFA';
 
 interface DashboardViewProps {
   personnel: Personnel | null;
@@ -33,7 +35,7 @@ interface DashboardViewProps {
   autoSync: boolean;
   onToggleAutoSync: () => void;
   is2FAEnabled: boolean;
-  onEnable2FA: (secret: string, code: string) => Promise<boolean>;
+  onEnable2FA: (secret: string, code: string, factorId?: string) => Promise<boolean>;
   onDisable2FA: () => Promise<void>;
   
   isDarkTheme: boolean;
@@ -75,40 +77,130 @@ export const DashboardView = ({
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
 
-  // Switch between 'radar', 'schedule', and 'settings' inline tabs matching native Compose behavior
-  const [activeTab, setActiveTab] = useState<'radar' | 'schedule' | 'settings'>('radar');
+  // Switch between 'map', 'phone_tracker', 'tools', and 'settings' matching high-end GPS Localizers
+  const [activeTab, setActiveTab ] = useState<'map' | 'phone_tracker' | 'tools' | 'settings'>('map');
 
   // TOTP local setup states
   const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
   const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
   const [mfaToken, setMfaToken] = useState('');
   const [mfaLoading, setMfaLoading] = useState(false);
 
+  // 1. Phone Locator Tracker Simulated states
+  const [phoneNum, setPhoneNum] = useState('9171234567');
+  const [networkCarrier, setNetworkCarrier] = useState('Smart Communications');
+  const [isScanningPhone, setIsScanningPhone] = useState(false);
+  const [phoneScanProgress, setPhoneScanProgress] = useState(0);
+  const [phoneScanStatusText, setPhoneScanStatusText] = useState('');
+  const [phoneScanResult, setPhoneScanResult] = useState<{
+    lockedAt: string;
+    latitude: number;
+    longitude: number;
+    signalStrength: string;
+    cellID: string;
+    batteryLevel: string;
+    operationalMode: string;
+    accuracyRadius: number;
+    resolvedAddress: string;
+  } | null>(null);
+
+  // 2. Tactical Speedometer & Performance Metrics Simulated states
+  const [simulatedPacing, setSimulatedPacing] = useState(4.2); // Base pace (km/h)
+  const [maxSpeedReached, setMaxSpeedReached] = useState(42.5); // Peak km/h
+  const [avgSpeed, setAvgSpeed] = useState(5.8); // Average km/h
+
+  // 3. Digital Compass Orientation Simulated states
+  const [headingDegree, setHeadingDegree] = useState(248);
+  const [headingAltitude, setHeadingAltitude] = useState(16.0); // elevation
+
+  // 4. Geofence Zone Guard Alert Simulated states
+  const [geofenceRadius, setGeofenceRadius] = useState<number>(100); // meters
+  const [isGeofenceArmed, setIsGeofenceArmed] = useState(true);
+  const [simulatedBreachActive, setSimulatedBreachActive] = useState(false);
+
+  // Trigger Phone Location Tracker Scan Simulation (com.cuteweb.tracklocation style)
+  const handleStartPhoneLocatorScan = () => {
+    if (phoneNum.trim().length < 9) {
+      Alert.alert("Format Error", "Please input a valid 9 to 10-digit telephone subscriber code.");
+      return;
+    }
+    setPhoneScanResult(null);
+    setIsScanningPhone(true);
+    setPhoneScanProgress(10);
+    setPhoneScanStatusText("Establishing secure handshakes with localized cells...");
+    
+    setTimeout(() => {
+      setPhoneScanProgress(40);
+      setPhoneScanStatusText("Broadcasting paging requests & analyzing BTS RSSI metrics...");
+      
+      setTimeout(() => {
+        setPhoneScanProgress(75);
+        setPhoneScanStatusText("Calculating Angle of Arrival (AoA) geographic sectors...");
+        
+        setTimeout(() => {
+          setPhoneScanProgress(100);
+          setIsScanningPhone(false);
+          
+          const latOffset = (Math.random() - 0.5) * 0.006;
+          const lngOffset = (Math.random() - 0.5) * 0.005;
+          const lockedLat = 14.59160 + latOffset;
+          const lockedLng = 120.97330 + lngOffset;
+          
+          setPhoneScanResult({
+            lockedAt: new Date().toLocaleTimeString(),
+            latitude: lockedLat,
+            longitude: lockedLng,
+            signalStrength: "-" + Math.floor(68 + Math.random() * 20) + " dBm (Optimal)",
+            cellID: "LAC-7492 CID-" + Math.floor(10000 + Math.random() * 80000),
+            batteryLevel: Math.floor(70 + Math.random() * 28) + "%",
+            operationalMode: Math.random() > 0.45 ? "STATIONARY (Base Complex)" : "PATROL TRANSLATION (Walking)",
+            accuracyRadius: Math.floor(4 + Math.random() * 6),
+            resolvedAddress: "Cabildo St cor General Luna, Intramuros, Manila, Metro Manila, 1002 Philippines",
+          });
+          
+          Alert.alert("Target Located", "Triangulated address: Cabildo St, Intramuros, Manila.");
+        }, 900);
+      }, 1000);
+    }, 1000);
+  };
+ 
   // Map limits for tactical grid render, matching native Android
   const minLat = 14.585;
   const maxLat = 14.594;
   const minLng = 120.970;
   const maxLng = 120.977;
-
-  const start2FASetup = () => {
-    const freshSecret = generateRandomSecret();
-    setMfaSecret(freshSecret);
-    setMfaToken('');
-    setIsSettingUp2FA(true);
+ 
+  const start2FASetup = async () => {
+    setMfaLoading(true);
+    try {
+      const email = personnel?.email || personnel?.badgeNumber || '';
+      const badge = personnel?.badgeNumber || '0000';
+      const result = await enrollMFA(badge, email);
+      setMfaSecret(result.secret);
+      setMfaFactorId(result.id);
+      setMfaToken('');
+      setIsSettingUp2FA(true);
+    } catch (err) {
+      console.warn("MFA Setup Initialization Error", err);
+      Alert.alert("Setup Error", "Failed to contact Supabase Auth to register dynamic MFA factors.");
+    } finally {
+      setMfaLoading(false);
+    }
   };
-
+ 
   const handleCopySecret = () => {
     Clipboard.setString(mfaSecret);
     Alert.alert("Secret Copied", "Your Two-Factor setup key has been saved to device clipboard.");
   };
-
+ 
   const handleEnable2FAConfirm = async () => {
     if (mfaToken.trim().length !== 6) {
       Alert.alert("Verify Error", "Please enter a valid 6-digit verification code.");
       return;
     }
     setMfaLoading(true);
-    const success = await onEnable2FA(mfaSecret, mfaToken.trim());
+    const success = await onEnable2FA(mfaSecret, mfaToken.trim(), mfaFactorId);
     setMfaLoading(false);
     if (success) {
       setIsSettingUp2FA(false);
@@ -257,74 +349,104 @@ export const DashboardView = ({
         </View>
       </View>
 
-      {/* THREE TACTICAL INLINE NAVIGATION SELECTION TABS */}
+      {/* FOUR TACTICAL INLINE COOPERATIVE GPS SELECTION TABS */}
       <View style={{ 
         flexDirection: 'row', 
         backgroundColor: colors.surfaceBlue, 
-        borderRadius: 8, 
-        borderWidth: 1, 
-        borderColor: colors.borderBlue, 
+        borderRadius: 12, 
+        borderWidth: 1.5, 
+        borderColor: isDarkTheme ? '#00F0FF33' : colors.borderBlue, 
         padding: 4, 
-        marginBottom: 16 
+        marginBottom: 16,
+        shadowColor: '#00F0FF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDarkTheme ? 0.15 : 0.02,
+        shadowRadius: 6,
+        elevation: 3
       }}>
         <TouchableOpacity 
           style={{
             flex: 1,
-            paddingVertical: 10,
-            borderRadius: 6,
-            backgroundColor: activeTab === 'radar' ? colors.accentAmber : 'transparent',
+            paddingVertical: 12,
+            borderRadius: 8,
+            backgroundColor: activeTab === 'map' ? (isDarkTheme ? '#1E2F40' : colors.accentAmber) : 'transparent',
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onPress={() => setActiveTab('radar')}
+          onPress={() => setActiveTab('map')}
         >
+          <Text style={{ fontSize: 16, marginBottom: 2 }}>📍</Text>
           <Text style={{ 
-            fontSize: 10, 
-            fontWeight: '900', 
-            letterSpacing: 0.5,
-            color: activeTab === 'radar' ? (isDarkTheme ? '#0B121F' : '#FFFFFF') : colors.textSecondary 
+            fontSize: 9, 
+            fontWeight: '950', 
+            letterSpacing: 0.2,
+            color: activeTab === 'map' ? (isDarkTheme ? '#00F0FF' : '#FFFFFF') : colors.textSecondary 
           }}>
-            LIVE RADAR
+            MAP MONITOR
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={{
             flex: 1,
-            paddingVertical: 10,
-            borderRadius: 6,
-            backgroundColor: activeTab === 'schedule' ? colors.accentAmber : 'transparent',
+            paddingVertical: 12,
+            borderRadius: 8,
+            backgroundColor: activeTab === 'phone_tracker' ? (isDarkTheme ? '#1E2F40' : colors.accentAmber) : 'transparent',
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onPress={() => setActiveTab('schedule')}
+          onPress={() => setActiveTab('phone_tracker')}
         >
+          <Text style={{ fontSize: 16, marginBottom: 2 }}>📞</Text>
           <Text style={{ 
-            fontSize: 10, 
-            fontWeight: '900', 
-            letterSpacing: 0.5,
-            color: activeTab === 'schedule' ? (isDarkTheme ? '#0B121F' : '#FFFFFF') : colors.textSecondary 
+            fontSize: 9, 
+            fontWeight: '950', 
+            letterSpacing: 0.2,
+            color: activeTab === 'phone_tracker' ? (isDarkTheme ? '#00F0FF' : '#FFFFFF') : colors.textSecondary 
           }}>
-            DUTY SECTOR
+            PHONE LOCATOR
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={{
             flex: 1,
-            paddingVertical: 10,
-            borderRadius: 6,
-            backgroundColor: activeTab === 'settings' ? colors.accentAmber : 'transparent',
+            paddingVertical: 12,
+            borderRadius: 8,
+            backgroundColor: activeTab === 'tools' ? (isDarkTheme ? '#1E2F40' : colors.accentAmber) : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onPress={() => setActiveTab('tools')}
+        >
+          <Text style={{ fontSize: 16, marginBottom: 2 }}>🧭</Text>
+          <Text style={{ 
+            fontSize: 9, 
+            fontWeight: '950', 
+            letterSpacing: 0.2,
+            color: activeTab === 'tools' ? (isDarkTheme ? '#00F0FF' : '#FFFFFF') : colors.textSecondary 
+          }}>
+            GPS TOOLS
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={{
+            flex: 1,
+            paddingVertical: 12,
+            borderRadius: 8,
+            backgroundColor: activeTab === 'settings' ? (isDarkTheme ? '#1E2F40' : colors.accentAmber) : 'transparent',
             alignItems: 'center',
             justifyContent: 'center',
           }}
           onPress={() => setActiveTab('settings')}
         >
+          <Text style={{ fontSize: 16, marginBottom: 2 }}>🛡️</Text>
           <Text style={{ 
-            fontSize: 10, 
-            fontWeight: '900', 
-            letterSpacing: 0.5,
-            color: activeTab === 'settings' ? (isDarkTheme ? '#0B121F' : '#FFFFFF') : colors.textSecondary 
+            fontSize: 9, 
+            fontWeight: '950', 
+            letterSpacing: 0.2,
+            color: activeTab === 'settings' ? (isDarkTheme ? '#00F0FF' : '#FFFFFF') : colors.textSecondary 
           }}>
             SECURITY HUB
           </Text>
@@ -332,7 +454,7 @@ export const DashboardView = ({
       </View>
 
       {/* TAB VALUE 1: LIVE SHIFT RADAR SCREEN (MAP CANVAS, CONTROLS, LISTS) */}
-      {activeTab === 'radar' && (
+      {activeTab === 'map' && (
         <View style={{ width: '100%' }}>
           
           {/* CRITICAL SOS PANIC BUTTON */}
@@ -565,57 +687,31 @@ export const DashboardView = ({
             )}
           </View>
 
-        </View>
-      )}
-
-      {/* TAB VALUE 2: DUTY SECTOR DETAILS & FORCE NOTICES */}
-      {activeTab === 'schedule' && (
-        <View style={{ width: '100%' }}>
-          
+          {/* CONSOLIDATED PNP ASSIGNED DUTY CONSOLE & INSTRUCTIONS */}
           <View style={styles.card}>
-            <Text style={styles.cardHeading}>ASSIGNED SECTOR MAP</Text>
-            <View style={styles.mapReplica}>
-              <Text style={styles.mapEmoji}>🗺️</Text>
-              <Text style={styles.mapTitle}>ACTIVE WORKPLACE BOUNDS</Text>
-              <Text style={styles.mapSub}>
-                {schedule?.sector || "Sector 4 (Intramuros & Ermita Foot Patrol Area)"}
-              </Text>
-              <View style={styles.mapLine} />
-              <Text style={styles.mapIndicator}>🎯 STATE COMPLIANCE ALERTS ENABLED</Text>
-            </View>
-
-            <View style={styles.scheduleDetailBox}>
-              <Text style={styles.schedTitle}>POLICE FORCE SCHEDULE DATABASE FILES</Text>
-              
-              <View style={styles.schedRow}>
-                <Text style={styles.schedKey}>Scheduled Date:</Text>
-                <Text style={styles.schedValue}>
-                  {schedule?.date || new Date().toISOString().split('T')[0]}
+            <Text style={styles.cardHeading}>📋 PNP ASSIGNED DUTY CONSOLE</Text>
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Assigned Sector Bounds:</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>
+                  {schedule?.sector || "Sector 4 (Intramuros & Ermita Foot Patrol Area)"}
                 </Text>
               </View>
-              
-              <View style={styles.schedRow}>
-                <Text style={styles.schedKey}>Operational Hours:</Text>
-                <Text style={styles.schedValue}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 8 }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Official Scheduled Hours:</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>
                   {schedule?.timeFrom || "08:00"} to {schedule?.timeTo || "17:00"} PHT
                 </Text>
               </View>
-
-              <View style={styles.schedRow}>
-                <Text style={styles.schedKey}>Force Patrol Unit:</Text>
-                <Text style={styles.schedValue}>Manila District Patrol Unit 4</Text>
-              </View>
-
-              <View style={styles.schedRow}>
-                <Text style={styles.schedKey}>Assigned Officer Code:</Text>
-                <Text style={[styles.schedValue, { fontSize: 9.5, fontFamily: 'monospace' }]}>
-                  {personnel?.id?.substring(0, 18) || "N/A"}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 8 }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Force Scheduled Date:</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>
+                  {schedule?.date || new Date().toISOString().split('T')[0]}
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* SECTOR ADVISORIES COMPLIANCE TEXT ROW FROM THEME INSTRUCTIONS */}
           <View style={[styles.card, { borderColor: colors.accentAmber + '40' }]}>
             <Text style={styles.cardHeading}>FORCE STANDING MANDATED INSTRUCTIONS</Text>
             <Text style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 16 }}>
@@ -628,21 +724,494 @@ export const DashboardView = ({
         </View>
       )}
 
+      {/* TAB VALUE 2: CELLULAR CODES & PHONE NUMBER TRACKING DESTRUCTORS */}
+      {activeTab === 'phone_tracker' && (
+        <View style={{ width: '100%' }}>
+          
+          {/* PHONE LOCATOR FORM */}
+          <View style={[styles.card, { borderColor: isDarkTheme ? '#00F0FF55' : colors.borderBlue }]}>
+            <Text style={styles.cardHeading}>📞 CELLULAR Base Station Tracker</Text>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 14 }}>
+              Locate any targeted officer, patrol squad signal beacon, or auxiliary support device by inputting their direct telephone coordinate line.
+            </Text>
+
+            {/* Carrier selector tabs */}
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.accentAmber, marginBottom: 6 }}>SELECT COOPERATIVE NETWORK ISP</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {['Smart Communications', 'Globe Telecom', 'DITO Telecommunity', 'Sun Radio'].map((carrier) => (
+                <TouchableOpacity
+                  key={carrier}
+                  onPress={() => setNetworkCarrier(carrier)}
+                  style={{
+                    backgroundColor: networkCarrier === carrier ? (isDarkTheme ? '#1E2F40' : '#E2E8F0') : 'transparent',
+                    borderWidth: 1,
+                    borderColor: networkCarrier === carrier ? '#00F0FF' : colors.borderBlue,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text style={{ fontSize: 10.5, fontWeight: 'bold', color: networkCarrier === carrier ? '#00F0FF' : colors.textSecondary }}>
+                    {carrier === 'Smart Communications' ? '🟢 Smart' : carrier === 'Globe Telecom' ? '🔵 Globe' : carrier === 'DITO Telecommunity' ? '🔴 DITO' : '🟡 Sun'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Country code / number inputs row */}
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.accentAmber, marginBottom: 6 }}>MOBILE TELEPHONE NO.</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <View style={{
+                backgroundColor: colors.inputBg,
+                borderColor: colors.borderBlue,
+                borderWidth: 1.5,
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4
+              }}>
+                <Text style={{ fontSize: 14 }}>🇵🇭</Text>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.blackText }}>+63</Text>
+              </View>
+
+              <TextInput
+                style={{
+                  flex: 1,
+                  backgroundColor: colors.inputBg,
+                  color: colors.blackText,
+                  borderRadius: 8,
+                  borderWidth: 1.5,
+                  borderColor: colors.borderBlue,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  fontSize: 16,
+                  fontWeight: 'bold',
+                  letterSpacing: 1
+                }}
+                value={phoneNum}
+                onChangeText={(v) => setPhoneNum(v.replace(/[^0-9]/g, ''))}
+                placeholder="9171234567"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+            </View>
+
+            {/* Scan execute button */}
+            {!isScanningPhone ? (
+              <TouchableOpacity
+                onPress={handleStartPhoneLocatorScan}
+                style={{
+                  backgroundColor: '#00F0FF',
+                  paddingVertical: 14,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                  shadowColor: '#00F0FF',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 6,
+                  elevation: 4
+                }}
+              >
+                <Text style={{ color: '#0B121F', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 }}>
+                  ⚡ EXECUTE SIGNAL TRIANGULATION
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                {/* Visual scan pulse animation grid */}
+                <View style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: 25,
+                  borderWidth: 2,
+                  borderColor: '#00F0FF',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 10,
+                  backgroundColor: '#00F0FF11'
+                }}>
+                  <ActivityIndicator size="small" color="#00F0FF" />
+                </View>
+
+                {/* Status progress bar */}
+                <View style={{ width: '100%', height: 6, backgroundColor: colors.borderBlue, borderRadius: 3, overflow: 'hidden', marginBottom: 10 }}>
+                  <View style={{ width: `${phoneScanProgress}%`, height: '100%', backgroundColor: '#00F0FF' }} />
+                </View>
+
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#00F0FF', textAlign: 'center' }}>
+                  {phoneScanProgress}% COMPLETE
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
+                  {phoneScanStatusText}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* TELEPHONE LOCATOR RESULTS CARD */}
+          {phoneScanResult && (
+            <View style={[styles.card, { borderColor: '#10B981', borderLeftWidth: 4 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#10B981' }}>🛰️ HARDWARE LOCKED [STABLE]</Text>
+                <Text style={{ fontSize: 9.5, color: colors.textSecondary }}>At {phoneScanResult.lockedAt}</Text>
+              </View>
+
+              {/* Replica target map pinpoint coordinates indicator */}
+              <View style={{
+                height: 120,
+                backgroundColor: isDarkTheme ? '#08101C' : '#EDF2F6',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#10B98133',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: 14,
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Grid decorations */}
+                <View style={[styles.radarCrosshairHorizontal, { backgroundColor: isDarkTheme ? '#10B98111' : '#10B98122' }]} />
+                <View style={[styles.radarCrosshairVertical, { backgroundColor: isDarkTheme ? '#10B98111' : '#10B98122' }]} />
+                <View style={{
+                  width: 100, height: 100, borderRadius: 50, borderWidth: 1, borderStyle: 'dashed',
+                  borderColor: '#10B98122', position: 'absolute'
+                }} />
+                
+                {/* Target blinking dot marker */}
+                <View style={{
+                  width: 16, height: 16, borderRadius: 8, backgroundColor: '#10B981',
+                  borderWidth: 2, borderColor: '#FFFFFF', position: 'absolute'
+                }} />
+                <View style={{
+                  width: 32, height: 32, borderRadius: 16, borderWidth: 1,
+                  borderColor: '#10B981', position: 'absolute', opacity: 0.5
+                }} />
+
+                <View style={{ position: 'absolute', bottom: 6, right: 6, backgroundColor: '#0F172A99', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 8, color: '#FFFFFF', fontWeight: 'bold' }}>
+                    {phoneScanResult.latitude.toFixed(5)}, {phoneScanResult.longitude.toFixed(5)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Data specifications */}
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Assigned Service Address:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText, maxWidth: '60%', textAlign: 'right' }}>{phoneScanResult.resolvedAddress}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 6 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Base Cell Station ID:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>{phoneScanResult.cellID}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 6 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Transceiver Signal Decibels:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#10B981' }}>{phoneScanResult.signalStrength}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 6 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Remote Battery Level:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>{phoneScanResult.batteryLevel}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 6 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Operational Sector Mode:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.accentAmber }}>{phoneScanResult.operationalMode}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Fallback Static Sector Details Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardHeading}>📋 PNP ASSIGNED DUTY CONSOLE</Text>
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Assigned Sector Bounds:</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>
+                  {schedule?.sector || "Sector 4 (Intramuros & Ermita Area)"}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 8 }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Official Scheduled Hours:</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>
+                  {schedule?.timeFrom || "08:00"} to {schedule?.timeTo || "17:00"} PHT
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* TAB VALUE 3: COORDINATED GPS TOOLS (SPEEDOMETER, COMPASS, GEOFENCE) */}
+      {activeTab === 'tools' && (
+        <View style={{ width: '100%' }}>
+          
+          {/* 1. TACTICAL SPEEDOMETER DIAL */}
+          <View style={styles.card}>
+            <Text style={styles.cardHeading}>🧭 DIGITAL SPEEDOMETER METERS</Text>
+            
+            <View style={{ alignItems: 'center', marginVertical: 14 }}>
+              <View style={{
+                width: 140,
+                height: 140,
+                borderRadius: 70,
+                borderWidth: 4,
+                borderColor: simulatedPacing > 40 ? '#EF4444' : '#00F0FF',
+                backgroundColor: isDarkTheme ? '#06101C' : '#F1F5F9',
+                justifyContent: 'center',
+                alignItems: 'center',
+                shadowColor: simulatedPacing > 40 ? '#EF4444' : '#00F0FF',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: isDarkTheme ? 0.35 : 0.05,
+                shadowRadius: 10,
+                elevation: 6
+              }}>
+                <Text style={{ fontSize: 36, fontWeight: '950', color: simulatedPacing > 40 ? '#EF4444' : colors.blackText }}>
+                  {simulatedPacing.toFixed(1)}
+                </Text>
+                <Text style={{ fontSize: 10, alignSelf: 'center', fontWeight: 'bold', color: colors.textSecondary, letterSpacing: 1 }}>KM/H</Text>
+
+                <View style={{
+                  position: 'absolute',
+                  top: 10,
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: simulatedPacing > 40 ? '#EF4444' : '#00F0FF'
+                }} />
+              </View>
+
+              <View style={{
+                marginTop: 14,
+                backgroundColor: simulatedPacing > 40 ? '#EF444422' : '#10B98122',
+                borderWidth: 1,
+                borderColor: simulatedPacing > 40 ? '#EF4444' : '#10B981',
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderRadius: 20
+              }}>
+                <Text style={{ fontSize: 9.5, fontWeight: '900', color: simulatedPacing > 40 ? '#EF4444' : '#10B981' }}>
+                  {simulatedPacing > 40 ? "⚠️ EXCEEDING DISTRICT LIMIT (OVERSPEED)" : "🟢 COMPLIANT • VEHICLE SPEED"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setSimulatedPacing(Math.max(0, simulatedPacing - 5));
+                  setAvgSpeed(Math.max(2, parseFloat((avgSpeed - 0.2).toFixed(1))));
+                }}
+                style={{ flex: 1, backgroundColor: colors.borderBlue, paddingVertical: 10, borderRadius: 6, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>➖ SLOW PATROL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setSimulatedPacing(Math.min(120, simulatedPacing + 5));
+                  if (simulatedPacing + 5 > maxSpeedReached) {
+                    setMaxSpeedReached(parseFloat((simulatedPacing + 5).toFixed(1)));
+                  }
+                  setAvgSpeed(parseFloat((avgSpeed + 0.3).toFixed(1)));
+                }}
+                style={{ flex: 1, backgroundColor: colors.accentAmber, paddingVertical: 10, borderRadius: 6, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#0B121F' : '#FFFFFF' }}>➕ ACCELERATE</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around', borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 12 }}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Avg Pacing Rate</Text>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.blackText, marginTop: 2 }}>{avgSpeed} km/h</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Max Registered Speed</Text>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.blackText, marginTop: 2 }}>{maxSpeedReached} km/h</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>District Speed Limit</Text>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#EF4444', marginTop: 2 }}>40 km/h</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 2. DIGITAL COMPASS CARD */}
+          <View style={styles.card}>
+            <Text style={styles.cardHeading}>🧭 TACTICAL DIGITAL COMPASS</Text>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              <View style={{
+                width: 90,
+                height: 90,
+                borderRadius: 45,
+                borderWidth: 2,
+                borderColor: colors.borderBlue,
+                backgroundColor: isDarkTheme ? '#07101C' : '#F8FAFC',
+                justifyContent: 'center',
+                alignItems: 'center',
+                position: 'relative'
+              }}>
+                <Text style={{ position: 'absolute', top: 4, fontSize: 8, fontWeight: 'bold', color: '#EF4444' }}>N</Text>
+                <Text style={{ position: 'absolute', bottom: 4, fontSize: 8, fontWeight: 'bold', color: colors.textSecondary }}>S</Text>
+                <Text style={{ position: 'absolute', left: 4, fontSize: 8, fontWeight: 'bold', color: colors.textSecondary }}>W</Text>
+                <Text style={{ position: 'absolute', right: 4, fontSize: 8, fontWeight: 'bold', color: colors.textSecondary }}>E</Text>
+                
+                <View style={{
+                  width: 2,
+                  height: 50,
+                  backgroundColor: '#EF4444',
+                  transform: [{ rotate: `${headingDegree}deg` }]
+                }} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.accentAmber }}>DIRECTION READOUT</Text>
+                <Text style={{ fontSize: 24, fontWeight: '950', color: colors.blackText, marginVertical: 2 }}>
+                  {headingDegree}° {headingDegree >= 337.5 || headingDegree < 22.5 ? 'N' : headingDegree >= 22.5 && headingDegree < 67.5 ? 'NE' : headingDegree >= 67.5 && headingDegree < 112.5 ? 'E' : headingDegree >= 112.5 && headingDegree < 157.5 ? 'SE' : headingDegree >= 157.5 && headingDegree < 202.5 ? 'S' : headingDegree >= 202.5 && headingDegree < 247.5 ? 'SW' : headingDegree >= 247.5 && headingDegree < 292.5 ? 'W' : 'NW'}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary }}>Alt: {headingAltitude} m</Text>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary }}>Accuracy: ±4.2m</Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setHeadingDegree((headingDegree + 45) % 360);
+                    setHeadingAltitude(parseFloat((headingAltitude + (Math.random() - 0.5) * 2).toFixed(1)));
+                  }}
+                  style={{
+                    backgroundColor: colors.borderBlue,
+                    paddingVertical: 6,
+                    borderRadius: 4,
+                    alignItems: 'center',
+                    marginTop: 8
+                  }}
+                >
+                  <Text style={{ fontSize: 9.5, fontWeight: 'bold', color: colors.blackText }}>🔄 ROTATE DIAL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* 3. GEOFENCE BOUNDS GUARD */}
+          <View style={[styles.card, simulatedBreachActive && { borderColor: '#EF4444', borderWidth: 2 }]}>
+            <Text style={styles.cardHeading}>🛡️ GEOFENCE SAFE GUARD PERIMETER</Text>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText }}>PERIMETER MONITOR ARMED</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                  Sound automated alarm alerts when officer coordinates exceed customized boundary limits.
+                </Text>
+              </View>
+              <Switch
+                value={isGeofenceArmed}
+                onValueChange={setIsGeofenceArmed}
+                trackColor={{ false: '#767577', true: '#10B981' }}
+                thumbColor={isGeofenceArmed ? '#FFFFFF' : '#f4f3f4'}
+              />
+            </View>
+
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.accentAmber, marginBottom: 6 }}>RADIUS CONSTRAINT METERS</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 14 }}>
+              {[50, 100, 250, 500].map((radius) => (
+                <TouchableOpacity
+                  key={radius}
+                  onPress={() => setGeofenceRadius(radius)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: geofenceRadius === radius ? (isDarkTheme ? '#1E2F40' : '#E2E8F0') : 'transparent',
+                    borderWidth: 1,
+                    borderColor: geofenceRadius === radius ? '#00F0FF' : colors.borderBlue,
+                    paddingVertical: 8,
+                    borderRadius: 6,
+                    alignItems: 'center'
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: geofenceRadius === radius ? '#00F0FF' : colors.textSecondary }}>
+                    {radius} Meters
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {!simulatedBreachActive ? (
+              <View style={{
+                backgroundColor: isGeofenceArmed ? '#10B98115' : 'transparent',
+                borderColor: isGeofenceArmed ? '#10B981' : colors.borderBlue,
+                borderWidth: 1,
+                borderRadius: 8,
+                padding: 12,
+                alignItems: 'center'
+              }}>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: isGeofenceArmed ? '#10B981' : colors.textSecondary }}>
+                  {isGeofenceArmed ? "🛡️ SAFE GUARD CONTEXT ACTIVE" : "⚙️ MONITOR SUSPENDED"}
+                </Text>
+                
+                {isGeofenceArmed && (
+                  <TouchableOpacity
+                    onPress={() => setSimulatedBreachActive(true)}
+                    style={{
+                      backgroundColor: '#EF4444',
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      borderRadius: 4,
+                      marginTop: 10
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#FFFFFF' }}>SIMULATE GEOFENCE BREACH</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={{
+                backgroundColor: '#EF444422',
+                borderColor: '#EF4444',
+                borderWidth: 1,
+                borderRadius: 8,
+                padding: 12,
+                alignItems: 'center'
+              }}>
+                <Text style={{ fontSize: 12, fontWeight: '900', color: '#EF4444', marginBottom: 4 }}>🚨 ALARM: GEOFENCE BREACH DETECTED!</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginBottom: 10 }}>
+                  Officer walked {geofenceRadius + 24}m away from the sector outline. Telemetry signal dispatched.
+                </Text>
+                
+                <TouchableOpacity
+                  onPress={() => setSimulatedBreachActive(false)}
+                  style={{
+                    backgroundColor: colors.blackText,
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    borderRadius: 6
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: isDarkTheme ? '#0B121F' : '#FFFFFF' }}>RESET & DISMISS COMPLIANCE ALARM</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* TAB VALUE 3: FORCE TOOLS & SECURITY CONTROL SHIELD */}
       {activeTab === 'settings' && (
         <View style={{ width: '100%' }}>
           
-          {/* GOOGLE AUTHENTICATOR MFA CARD */}
+          {/* SUPABASE MULTI-FACTOR AUTHENTICATION (MFA) CARD */}
           <View style={styles.card}>
-            <Text style={styles.cardHeading}>🛡️ GOOGLE AUTHENTICATOR (MFA SECURE SHIELD)</Text>
+            <Text style={styles.cardHeading}>🛡️ SUPABASE MULTI-FACTOR AUTHENTICATION (MFA)</Text>
             
             {is2FAEnabled && !isSettingUp2FA ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkTheme ? '#1B2C24' : '#E6F4EA', padding: 12, borderRadius: 8, marginBottom: 14 }}>
+               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkTheme ? '#1B2C24' : '#E6F4EA', padding: 12, borderRadius: 8, marginBottom: 14 }}>
                 <Text style={{ fontSize: 28, marginRight: 12 }}>🛡️</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#10B981' }}>MFA IDENTIFICATION ENFORCED</Text>
                   <Text style={{ fontSize: 9.5, color: colors.textSecondary }}>
-                    Officer shield is protected by rotating Google TOTP tokens. Future identity joins will require authenticator synchronizations.
+                    Officer shield is protected by rotating Supabase MFA tokens. Future identity joins will require authenticator synchronizations.
                   </Text>
                 </View>
                 <TouchableOpacity 
@@ -658,7 +1227,7 @@ export const DashboardView = ({
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#EF4444' }}>MFA PROTECTION SUSPENDED</Text>
                   <Text style={{ fontSize: 9.5, color: colors.textSecondary }}>
-                    Identity linkage is relying on passwords only. Enable Google Authenticator keys to lock coordinate logs from administrative modifications.
+                    Identity linkage is relying on passwords only. Enable Supabase MFA security keys to lock coordinate logs from administrative modifications.
                   </Text>
                 </View>
                 <TouchableOpacity 
@@ -675,7 +1244,7 @@ export const DashboardView = ({
               <View style={{ borderTopWidth: 0.5, borderTopColor: colors.borderBlue, paddingTop: 14 }}>
                 <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentAmber, marginBottom: 4 }}>STEP 1: CONFIGURE SYSTEM KEY</Text>
                 <Text style={{ fontSize: 10.5, color: colors.textSecondary, marginBottom: 10 }}>
-                  Open Google Authenticator on your smartphone, click "+", select "Enter setup key".
+                  Open your Authenticator app (Google Authenticator, Microsoft Authenticator, etc.) on your smartphone, tap "+", select "Enter setup key".
                 </Text>
 
                 <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentAmber, marginBottom: 4 }}>STEP 2: DETAILS INTEGRATIONS</Text>
@@ -683,7 +1252,7 @@ export const DashboardView = ({
                   <Text style={{ fontSize: 9, color: colors.textSecondary, alignSelf: 'flex-start' }}>Account Reference:</Text>
                   <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText, marginBottom: 8, alignSelf: 'flex-start' }}>PNP Patroller ({personnel?.badgeNumber || '0000'})</Text>
                   
-                  {/* Google Authenticator scan-ready QR code */}
+                  {/* scan-ready QR code */}
                   <View style={{
                     backgroundColor: '#FFFFFF',
                     padding: 8,
@@ -714,7 +1283,7 @@ export const DashboardView = ({
 
                 <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentAmber, marginBottom: 4 }}>STEP 3: SECURE TOKEN VERIFY</Text>
                 <Text style={{ fontSize: 10.5, color: colors.textSecondary, marginBottom: 6 }}>
-                  Enter the 6-digit rotation code displayed in Google Authenticator:
+                  Enter the 6-digit rotation code displayed in your Authenticator app:
                 </Text>
 
                 <TextInput

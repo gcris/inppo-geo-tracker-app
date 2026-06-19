@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { usePatrolState } from './src/hooks/usePatrolState';
 import { getStyles, getThemeColors } from './src/theme/styles';
 import { LoginView } from './src/components/LoginView';
+import { RegisterView } from './src/components/RegisterView';
 import { DashboardView } from './src/components/DashboardView';
 import { TopCommandHeader } from './src/components/TopCommandHeader';
 import { AnimatedSplashScreen } from './src/components/AnimatedSplashScreen';
@@ -13,6 +14,7 @@ export default function App() {
   // Police Dark Tactical Theme is active by default to replicate native Android exactly
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
+  const [viewMode, setViewMode] = useState<'login' | 'register'>('login');
   
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
@@ -44,6 +46,7 @@ export default function App() {
     requestForegroundPermission,
     requestBackgroundPermission,
     enableGpsInline,
+    registerUser,
   } = usePatrolState();
 
   // Listen for the system-level persistent notification's SOS button clicks
@@ -72,7 +75,7 @@ export default function App() {
     );
   }
 
-  // If there's no authenticated officer, render target credentials login view
+  // If there's no authenticated officer, render target credentials login or register view
   if (!personnel) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bgDark }]}>
@@ -80,19 +83,28 @@ export default function App() {
           barStyle={isDarkTheme ? "light-content" : "dark-content"} 
           backgroundColor={colors.bgDark} 
         />
-        <LoginView
-          isGpsEnabled={isGpsEnabled}
-          foregroundGranted={foregroundGranted}
-          backgroundGranted={backgroundGranted}
-          gpsLoading={gpsLoading}
-          onLogin={login}
-          onOpenSettings={openSystemSettings}
-          isDarkTheme={isDarkTheme}
-          onToggleTheme={handleToggleTheme}
-          onRequestForeground={requestForegroundPermission}
-          onRequestBackground={requestBackgroundPermission}
-          onEnableGpsInline={enableGpsInline}
-        />
+        {viewMode === 'register' ? (
+          <RegisterView
+            onRegister={registerUser}
+            onBackToLogin={() => setViewMode('login')}
+            isDarkTheme={isDarkTheme}
+          />
+        ) : (
+          <LoginView
+            isGpsEnabled={isGpsEnabled}
+            foregroundGranted={foregroundGranted}
+            backgroundGranted={backgroundGranted}
+            gpsLoading={gpsLoading}
+            onLogin={login}
+            onOpenSettings={openSystemSettings}
+            isDarkTheme={isDarkTheme}
+            onToggleTheme={handleToggleTheme}
+            onRequestForeground={requestForegroundPermission}
+            onRequestBackground={requestBackgroundPermission}
+            onEnableGpsInline={enableGpsInline}
+            onGoToRegister={() => setViewMode('register')}
+          />
+        )}
       </SafeAreaView>
     );
   }

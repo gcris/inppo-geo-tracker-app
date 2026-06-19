@@ -10,11 +10,17 @@ import com.example.data.local.PersonnelEntity
 import com.example.data.local.ScheduleEntity
 import com.example.data.local.VehicleEntity
 import com.example.data.local.VehicleLogEntity
+import com.example.data.local.RankEntity
+import com.example.data.local.UnitEntity
 import com.example.data.repository.LoginResult
 import com.example.data.repository.TrackingRepository
 import com.example.service.LocationTrackingService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
+enum class ViewMode {
+    LOGIN, REGISTER
+}
 
 sealed interface LoginUiState {
     object Idle : LoginUiState
@@ -23,6 +29,13 @@ sealed interface LoginUiState {
     data class PendingApproval(val personnel: PersonnelEntity) : LoginUiState
     object NotFound : LoginUiState
     data class Error(val message: String) : LoginUiState
+}
+
+sealed interface RegisterUiState {
+    object Idle : RegisterUiState
+    object Loading : RegisterUiState
+    data class Success(val message: String) : RegisterUiState
+    data class Error(val message: String) : RegisterUiState
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -35,6 +48,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isShiftActive: StateFlow<Boolean> = repository.isShiftActive
     val syncStatus: StateFlow<TrackingRepository.SyncState> = repository.syncStatus
 
+    private val _viewMode = MutableStateFlow(ViewMode.LOGIN)
+    val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+
+    fun navigateToRegister() {
+        _viewMode.value = ViewMode.REGISTER
+    }
+
+    fun navigateToLogin() {
+        _viewMode.value = ViewMode.LOGIN
+    }
+
     private val _isDarkTheme = MutableStateFlow(true) // Dynamic Light/Dark selection (defaulting to PNP dark theme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
@@ -44,8 +68,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPermissionGranted = MutableStateFlow(true)
     val isPermissionGranted: StateFlow<Boolean> = _isPermissionGranted.asStateFlow()
 
+    private val _ranksState = MutableStateFlow<List<RankEntity>>(emptyList())
+    val ranksState: StateFlow<List<RankEntity>> = _ranksState.asStateFlow()
+
+    private val _unitsState = MutableStateFlow<List<UnitEntity>>(emptyList())
+    val unitsState: StateFlow<List<UnitEntity>> = _unitsState.asStateFlow()
+
+    private val _registerState = MutableStateFlow<RegisterUiState>(RegisterUiState.Idle)
+    val registerState: StateFlow<RegisterUiState> = _registerState.asStateFlow()
+
     init {
         checkLocationEnabledState()
+        loadRegistrationMetadata()
+    }
+
+    fun loadRegistrationMetadata() {
+        viewModelScope.launch {
+            _ranksState.value = repository.getRanks()
+            _unitsState.value = repository.getUnits()
+        }
     }
 
     fun checkLocationEnabledState() {
@@ -165,6 +206,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.syncCachedLogs(overrideVehicleId = "eeca1d4a-67bf-46b4-b10c-d19602ca5aba")
         }
+    }
+
+    fun registerUser(
+        email: String,
+        badgeNumber: String,
+        rankId: String,
+        fullname: String,
+        unitId: String,
+        designation: String,
+        phoneNumber: String,
+        viberNumber: String,
+        passwordInput: String
+    ) {
+        viewModelScope.launch {
+            _registerState.value = RegisterUiState.Loading
+            try {
+                val candidate = repository.findCandidatePersonnel(
+                    badgeNumber = badgeNumber.trim(),
+                    rankId = rankId.trim(),
+                    unitId = unitId.trim(),
+                    designation = designation.trim()
+                )
+                if (candidate == null) {
+                    _registerState.value = RegisterUiState.Error(
+                        "No matching personnel record found with the provided Identification metadata (Badge Number, Rank, Unit, and Designation combination). Registration is denied."
+                    )
+                    return@launch
+                }
+
+                val success = repository.registerPersonnel(
+                    id = candidate.id,
+                    email = email.trim(),
+                    passwordCheck = passwordInput.trim(),
+                    fullname = fullname.trim(),
+                    phoneNumber = phoneNumber.trim(),
+                    viberNumber = viberNumber.trim()
+                )
+
+                if (success) {
+                    _registerState.value = RegisterUiState.Success(
+                        "Registration successful! Your profile has been submitted for administrative verification and approval."
+                    )
+                } else {
+                    _registerState.value = RegisterUiState.Error("Failed to register profile. Record update could not be executed.")
+                }
+            } catch (e: Exception) {
+                _registerState.value = RegisterUiState.Error(e.message ?: "An unexpected database error occurred during registration.")
+            }
+        }
+    }
+
+    fun resetRegisterState() {
+        _registerState.value = RegisterUiState.Idle
     }
 
     fun logout() {

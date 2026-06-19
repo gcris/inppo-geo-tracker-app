@@ -5,6 +5,11 @@ import * as Location from 'expo-location';
 import { Personnel, Vehicle, Schedule, VehicleLog } from '../types';
 import { 
   getPersonnelByBadge, 
+  getPersonnelByEmail,
+  registerPersonnel,
+  findCandidatePersonnel,
+  getRanks,
+  getUnits,
   getVehicleByPersonnel, 
   insertVehicle, 
   getScheduleByPersonnel, 
@@ -13,7 +18,8 @@ import {
   getUnsyncedCount, 
   markLogsAsSynced, 
   cleanSyncedLogs,
-  insertVehicleLog
+  insertVehicleLog,
+  savePersonnel
 } from '../services/database';
 import { 
   startBackgroundUpdates, 
@@ -25,25 +31,12 @@ import {
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateTOTP, generateRandomSecret } from '../services/totp';
-
-export const resolveEmail = (input: string): string => {
-  const normalized = input.trim().toLowerCase();
-  if (normalized.includes('@')) {
-    return normalized;
-  }
-  // Try to map badge number / username to email
-  if (normalized.includes('4820') || normalized.includes('gerry')) {
-    return 'itsme.gerrycriscariaga@gmail.com';
-  }
-  if (normalized.includes('7700') || normalized.includes('magalong')) {
-    return 'magalong@pnp.gov.ph';
-  }
-  if (normalized.includes('1402') || normalized.includes('dalisay')) {
-    return 'cardalisay@pnp.gov.ph';
-  }
-  // Fallback
-  return `${normalized}@pnp.gov.ph`;
-};
+import { 
+  enrollMFA, 
+  verifyMFAEnrollment, 
+  checkMFAStatus, 
+  unenrollMFA 
+} from '../services/supabaseMFA';
 
 export const usePatrolState = () => {
   const [personnel, setPersonnel] = useState<Personnel | null>(null);
@@ -177,28 +170,20 @@ export const usePatrolState = () => {
     }
   };
 
-  // Google 2FA settings & check effects
+  // Supabase 2FA Settings & check effects
   useEffect(() => {
     const check2FA = async () => {
       if (personnel) {
         try {
-          const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
-          // Attempt using new clear key first, then fallback/migrate from old key if present
-          let secret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`);
-          if (!secret) {
-            secret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`);
-            if (!secret) {
-              secret = await AsyncStorage.getItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
-            }
-            if (secret) {
-              await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`, secret);
-              await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
-              await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
-            }
+          const email = personnel.email || personnel.badgeNumber;
+          const status = await checkMFAStatus(email);
+          setIs2FAEnabled(status.isEnabled);
+          if (status.isEnabled && status.factorId) {
+            const emailKey = email.trim().toLowerCase();
+            await AsyncStorage.setItem(`@pnp_supabase_mfa_factor_id_${emailKey}`, status.factorId);
           }
-          setIs2FAEnabled(!!secret);
         } catch (e) {
-          console.warn("Error checking 2FA state", e);
+          console.warn("Error checking Supabase MFA state", e);
         }
       } else {
         setIs2FAEnabled(false);
@@ -207,30 +192,32 @@ export const usePatrolState = () => {
     check2FA();
   }, [personnel]);
 
-  const enable2FA = async (secret: string, code: string): Promise<boolean> => {
+  const enable2FA = async (secret: string, code: string, factorId?: string): Promise<boolean> => {
     if (!personnel) return false;
     try {
-      const expected = generateTOTP(secret);
-      const expectedPrev = generateTOTP(secret, Math.floor(Date.now() / 1000) - 30);
-      const expectedNext = generateTOTP(secret, Math.floor(Date.now() / 1000) + 30);
+      const email = personnel.email || personnel.badgeNumber;
+      const emailKey = email.trim().toLowerCase();
       
-      if (code !== expected && code !== expectedPrev && code !== expectedNext) {
-        Alert.alert("Verification Failed", "The 6-digit Google Authenticator code you entered is incorrect. Double check your typing and current device clock.");
+      // Determine the active factorId (e.g., from AsyncStorage fallback or passed directly)
+      let activeFactorId = factorId;
+      if (!activeFactorId) {
+        activeFactorId = await AsyncStorage.getItem(`@pnp_supabase_mfa_factor_id_${emailKey}`) || `sim_${Date.now()}`;
+      }
+
+      const verified = await verifyMFAEnrollment(email, activeFactorId, code, secret);
+      
+      if (!verified) {
+        Alert.alert("Verification Failed", "The 6-digit MFA verification code is invalid, expired, or has already been used.");
         return false;
       }
 
-      const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
-      await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`, secret);
-      // Clean up legacy keys if they are still around
-      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
-      await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
-      
+      await AsyncStorage.setItem(`@pnp_supabase_mfa_factor_id_${emailKey}`, activeFactorId);
       setIs2FAEnabled(true);
-      Alert.alert("2FA Secured", "Google Authenticator two-factor authentication has been successfully locked to your PNP badge profile!");
+      Alert.alert("MFA Secured", "Supabase Multi-Factor Authentication (MFA) has been successfully verified and active for your officer profile!");
       return true;
     } catch (e) {
       console.error(e);
-      Alert.alert("Setup Error", "An error occurred while enabling two-factor authentication.");
+      Alert.alert("Setup Error", "An error occurred while enabling Supabase MFA.");
       return false;
     }
   };
@@ -238,15 +225,23 @@ export const usePatrolState = () => {
   const disable2FA = async () => {
     if (!personnel) return;
     try {
-      const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
-      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`);
+      const email = personnel.email || personnel.badgeNumber;
+      const emailKey = email.trim().toLowerCase();
+      const factorId = await AsyncStorage.getItem(`@pnp_supabase_mfa_factor_id_${emailKey}`) || '';
+      
+      await unenrollMFA(email, factorId);
+      await AsyncStorage.removeItem(`@pnp_supabase_mfa_factor_id_${emailKey}`).catch(() => {});
+      
+      // Clean up legacy keys
+      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`).catch(() => {});
       await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
       await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
+
       setIs2FAEnabled(false);
-      Alert.alert("2FA Disabled", "Google Authenticator is now disabled. Warning: Your officer profile is no longer protected by MFA.");
+      Alert.alert("MFA Disabled", "Supabase Multi-Factor Authentication (MFA) is now disabled. Warning: Your officer profile is no longer protected by MFA.");
     } catch (e) {
       console.error(e);
-      Alert.alert("Disable Error", "An error occurred while disabling two-factor authentication.");
+      Alert.alert("Disable Error", "An error occurred while disabling Supabase multi-factor authentication.");
     }
   };
 
@@ -294,8 +289,8 @@ export const usePatrolState = () => {
 
   const login = async (emailInput: string, passwordInput: string, otpCode?: string): Promise<boolean | 'NEED_2FA' | 'PENDING_APPROVAL' | 'NOT_FOUND' | string> => {
     const trimmedEmail = emailInput.trim();
-    if (!trimmedEmail) {
-      return "Please enter your email or badge number.";
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      return "Please enter a valid email address.";
     }
     if (!passwordInput || passwordInput.trim().length === 0) {
       return "Please enter your password.";
@@ -315,45 +310,29 @@ export const usePatrolState = () => {
       badge = trimmedEmail.toUpperCase();
     }
 
-    const targetEmail = resolveEmail(trimmedEmail);
+    const targetEmail = trimmedEmail.toLowerCase();
 
-    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS EMAIL BEFORE DOING LOGINS - FORCED COMPULSORY
+    // CHECK SUPABASE MULTI-FACTOR AUTHENTICATION (MFA) - FORCED COMPULSORY
     try {
-      let storedSecret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`);
-      if (!storedSecret) {
-        // Fallback or migration check from legacy badge keys
-        storedSecret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${badge}`);
-        if (!storedSecret) {
-          storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
-        }
-        if (storedSecret) {
-          await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`, storedSecret);
-          await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${badge}`).catch(() => {});
-          await AsyncStorage.removeItem(`@pnp_2fa_secret_${badge}`).catch(() => {});
-        }
-      }
-      if (!storedSecret) {
-        // Force-seed a dynamic random security key for this email, making Google Authenticator strictly mandatory
-        const randomSecret = generateRandomSecret();
-        await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`, randomSecret);
-        storedSecret = randomSecret;
+      let status = await checkMFAStatus(targetEmail);
+      if (!status.isEnabled) {
+        // Force-seed status enrollment to guarantee high-grade secure PNP compliance on first login
+        const enrollment = await enrollMFA(badge || '0000', targetEmail);
+        status = { isEnabled: true, factorId: enrollment.id, secret: enrollment.secret };
       }
 
-      if (storedSecret) {
+      if (status.isEnabled) {
         if (!otpCode) {
-          return `NEED_2FA_SECRET:${storedSecret}`;
+          return `NEED_2FA_SECRET:${status.secret || 'SUPABASE_MFA'}`;
         }
-        // Validate OTP
-        const expected = generateTOTP(storedSecret);
-        const expectedPrev = generateTOTP(storedSecret, Math.floor(Date.now() / 1000) - 30);
-        const expectedNext = generateTOTP(storedSecret, Math.floor(Date.now() / 1000) + 30);
-        
-        if (otpCode !== expected && otpCode !== expectedPrev && otpCode !== expectedNext) {
-          return "Invalid 2FA Token. The Google Authenticator 6-digit verification code is invalid or expired.";
+        // Verify code
+        const verified = await verifyMFAEnrollment(targetEmail, status.factorId || '', otpCode, status.secret);
+        if (!verified) {
+          return "Invalid MFA Token. The Supabase MFA 6-digit verification code is invalid, expired, or has already been used.";
         }
       }
     } catch (err) {
-      console.warn("AsyncStorage 2FA lookup/seeding error", err);
+      console.warn("Supabase MFA login checking err", err);
     }
 
     try {
@@ -437,7 +416,25 @@ export const usePatrolState = () => {
 
       // If personnel profile is still empty, fetch from SQLite local database
       if (!pUser) {
-        pUser = await getPersonnelByBadge(badge);
+        // First try finding the personnel by the registered email
+        const localUserByEmail = await getPersonnelByEmail(trimmedEmail);
+        if (localUserByEmail) {
+          const userPassword = localUserByEmail.password || '';
+          if (passwordInput !== userPassword) {
+            return "Incorrect password. Please provide the matching password for this email.";
+          }
+          pUser = localUserByEmail;
+        } else {
+          // If no email matching is found, fallback to checking badge for seeded officers
+          pUser = await getPersonnelByBadge(badge);
+          if (pUser) {
+            // Seeded profiles may have seeded passwords
+            const seededPassword = pUser.password || 'password123';
+            if (passwordInput !== seededPassword) {
+              return "Incorrect password.";
+            }
+          }
+        }
       }
 
       if (!pUser) {
@@ -449,7 +446,7 @@ export const usePatrolState = () => {
       }
 
       if (pUser) {
-        pUser.email = resolveEmail(trimmedEmail);
+        pUser.email = trimmedEmail.toLowerCase();
       }
 
       // Successful verification
@@ -788,6 +785,56 @@ export const usePatrolState = () => {
     });
   };
 
+  const registerUser = async (registrationData: {
+    email: string;
+    badge_number: string;
+    rank_id: string;
+    fullname: string;
+    unit_id: string;
+    designation: string;
+    phone_number: string;
+    viber_number: string;
+    password?: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    try {
+      // 1. Verify existence of the personnel via badge_number, rank_id, unit_id, and designation
+      const candidate = await findCandidatePersonnel(
+        registrationData.badge_number,
+        registrationData.rank_id,
+        registrationData.unit_id,
+        registrationData.designation
+      );
+
+      if (!candidate) {
+        return {
+          success: false,
+          message: "No matching personnel record found with the provided Identification metadata (Badge Number, Rank, Unit, and Designation combination). Registration is denied."
+        };
+      }
+
+      // 2. Update the existing candidate record with the new registration details
+      await registerPersonnel(
+        candidate.id,
+        registrationData.email,
+        registrationData.password || 'password123',
+        registrationData.fullname,
+        registrationData.phone_number,
+        registrationData.viber_number
+      );
+
+      return {
+        success: true,
+        message: "Registration successful! Your profile has been submitted for administrative verification and approval."
+      };
+    } catch (err: any) {
+      console.error("Registration error", err);
+      return {
+        success: false,
+        message: err.message || "An unexpected database error occurred during registration. Please try again."
+      };
+    }
+  };
+
   return {
     personnel,
     vehicle,
@@ -815,5 +862,6 @@ export const usePatrolState = () => {
     requestForegroundPermission,
     requestBackgroundPermission,
     enableGpsInline,
+    registerUser,
   };
 };

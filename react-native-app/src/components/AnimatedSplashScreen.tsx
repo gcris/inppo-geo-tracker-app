@@ -15,8 +15,6 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
     textSec: '#94A3B8',
     tacticalGold: '#FACC15',
     policeBlue: '#1E3A8A',
-    bodyMetal: '#1E293B',
-    legNavy: '#0F172A',
     laserGreen: '#10B981',
   } : {
     bg: '#F1F5F9',
@@ -24,8 +22,6 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
     textSec: '#475569',
     tacticalGold: '#1E3A8A',
     policeBlue: '#2563EB',
-    bodyMetal: '#334155',
-    legNavy: '#1E293B',
     laserGreen: '#16A34A',
   };
 
@@ -33,8 +29,10 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Walk Cycle Animations
-  const walkCycle = useRef(new Animated.Value(0)).current; // 0 to 1 cycle
+  // Breathing Pulse for Official Logo (Fade In & Out Loop)
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+
+  // Moving ground telemetry
   const gridCycle = useRef(new Animated.Value(0)).current; // 0 to 1 loop for moving ground
 
   // Loading Protocol States
@@ -42,28 +40,44 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
   const [percent, setPercent] = useState<number>(0);
 
   useEffect(() => {
-    // 1. Fade in content on mount
+    // 1. Fade in screen content on mount
     Animated.timing(contentFadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
     }).start();
 
-    // 2. Loop stride cycle
-    Animated.loop(
-      Animated.timing(walkCycle, {
+    // 2. Logo Fade In & Breathing Loop
+    Animated.sequence([
+      Animated.timing(logoOpacity, {
         toValue: 1,
         duration: 1000,
-        easing: Easing.linear,
+        easing: Easing.out(Easing.ease),
         useNativeDriver: true,
-      })
-    ).start();
+      }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(logoOpacity, {
+            toValue: 0.35,
+            duration: 1300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 1300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          })
+        ])
+      )
+    ]).start();
 
     // 3. Loop moving ground grid
     Animated.loop(
       Animated.timing(gridCycle, {
         toValue: 1,
-        duration: 800,
+        duration: 900,
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -75,16 +89,16 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
         const next = prev + Math.floor(Math.random() * 8) + 4;
         return next > 100 ? 100 : next;
       });
-    }, 150);
+    }, 140);
 
     const logs = [
       'Establishing TLS encrypted proxy handshake...',
       'Binding cell tower signals and sector vectors...',
       'Caching Local Tracking Database indexes...',
-      'Verifying Google Authenticator MFA profiles...',
+      'Verifying Supabase MFA session profiles...',
       'Pre-fetching active foot schedules...',
       'Arming background distress beacon systems...',
-      'PNP Patrol Console online and secured.',
+      'Ilocos Norte Patrol Console secured.',
     ];
 
     let logIndex = 0;
@@ -106,7 +120,7 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
         clearInterval(logInterval);
         onFinish();
       });
-    }, 3800);
+    }, 3850);
 
     return () => {
       clearTimeout(timer);
@@ -114,35 +128,6 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
       clearInterval(logInterval);
     };
   }, []);
-
-  // Hip / leg sway interpolations
-  // Leg 1 swings: forwards (0 to 0.25), back (0.25 to 0.75), forwards (0.75 to 1)
-  const leftLegRot = walkCycle.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['-28deg', '0deg', '28deg', '0deg', '-28deg'],
-  });
-
-  const rightLegRot = walkCycle.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['28deg', '0deg', '-28deg', '0deg', '28deg'],
-  });
-
-  // Arms sway in opposition to thighs
-  const leftArmRot = walkCycle.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['24deg', '0deg', '-24deg', '0deg', '24deg'],
-  });
-
-  const rightArmRot = walkCycle.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['-24deg', '0deg', '24deg', '0deg', '-24deg'],
-  });
-
-  // Vertical torso bobbing happens at twice the walk stride rate
-  const bobbing = walkCycle.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: [0, -5, 0, -5, 0],
-  });
 
   // Moving ground dashed lines
   const gridTranslateX = gridCycle.interpolate({
@@ -154,93 +139,38 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
     <Animated.View style={[styles.container, { backgroundColor: colors.bg, opacity: fadeAnim }]}>
       <Animated.View style={[styles.content, { opacity: contentFadeAnim }]}>
         
-        {/* Decorative Grid Scanning Circles */}
+        {/* Decorative Radar Scanning Circles */}
         <View style={styles.gridHolder}>
-          <View style={[styles.radialWave, { borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', width: 280, height: 280, borderRadius: 140 }]} />
-          <View style={[styles.radialWave, { borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', width: 180, height: 180, borderRadius: 90 }]} />
+          <View style={[styles.radialWave, { borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', width: 330, height: 330, borderRadius: 165 }]} />
+          <View style={[styles.radialWave, { borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', width: 220, height: 220, borderRadius: 110 }]} />
         </View>
 
         {/* Tactical Badge Header */}
         <View style={styles.headerBlock}>
           <Text style={[styles.brandPre, { color: colors.tacticalGold }]}>PHILIPPINE NATIONAL POLICE</Text>
           <Text style={[styles.brandTitle, { color: colors.textMain }]}>PATROL TRACKER</Text>
+          <Text style={[styles.brandSub, { color: colors.textSec }]}>ILOCOS NORTE PRO1</Text>
         </View>
 
-        {/* WALKING PATROL OFFICER COMPOSITE MODEL */}
-        <View style={styles.officerStage}>
-          
-          <Animated.View style={{ transform: [{ translateY: bobbing }] }}>
-            
-            {/* Top Level Cap & Head Container */}
-            <View style={styles.headAssembly}>
-              
-              {/* Peak Police Cap */}
-              <View style={styles.policeCap}>
-                <View style={[styles.capVisor, { backgroundColor: colors.policeBlue }]} />
-                <View style={[styles.capCrown, { backgroundColor: colors.bodyMetal }]} />
-                <View style={[styles.capGoldStrip, { backgroundColor: colors.tacticalGold }]} />
-                <View style={[styles.capGoldStar, { backgroundColor: colors.tacticalGold, transform: [{ rotate: '45deg' }] }]} />
-              </View>
-
-              {/* Face/Head Layer */}
-              <View style={[styles.faceSphere, { backgroundColor: '#FDBA74' }]}>
-                {/* Tactical sunglasses */}
-                <View style={[styles.shadesRim, { backgroundColor: '#090D16' }]} />
-              </View>
-
-              {/* Neck */}
-              <View style={[styles.neckStem, { backgroundColor: '#E0A96D' }]} />
-
-            </View>
-
-            {/* Torso Assembly with Tactical Vest */}
-            <View style={[styles.torsoShell, { backgroundColor: colors.bodyMetal }]}>
-              {/* Tactical Badge Patch */}
-              <View style={[styles.vestPatrolBadge, { backgroundColor: colors.tacticalGold }]} />
-              
-              {/* Arm Left (swinging) */}
-              <Animated.View style={[styles.armLeftAxis, { transform: [{ rotate: leftArmRot }] }]}>
-                <View style={[styles.armSleeve, { backgroundColor: colors.policeBlue }]} />
-                <View style={[styles.handKnuckles, { backgroundColor: '#FDBA74' }]} />
-              </Animated.View>
-
-              {/* Arm Right (swinging) */}
-              <Animated.View style={[styles.armRightAxis, { transform: [{ rotate: rightArmRot }] }]}>
-                <View style={[styles.armSleeve, { backgroundColor: colors.policeBlue }]} />
-                <View style={[styles.handKnuckles, { backgroundColor: '#FDBA74' }]} />
-              </Animated.View>
-
-              {/* Officer Uniform Badge Label */}
-              <Text style={styles.vestUtilityText}>PNP</Text>
-
-            </View>
-
-          </Animated.View>
-
-          {/* Leg Left (swinging with pivot at hips) */}
-          <Animated.View style={[styles.legLeftPivot, { transform: [{ rotate: leftLegRot }] }]}>
-            <View style={[styles.pantLeg, { backgroundColor: colors.legNavy }]} />
-            <View style={[styles.heavyOfficerBoot, { backgroundColor: '#090D16' }]} />
-          </Animated.View>
-
-          {/* Leg Right (swinging with pivot at hips) */}
-          <Animated.View style={[styles.legRightPivot, { transform: [{ rotate: rightLegRot }] }]}>
-            <View style={[styles.pantLeg, { backgroundColor: colors.legNavy }]} />
-            <View style={[styles.heavyOfficerBoot, { backgroundColor: '#090D16' }]} />
-          </Animated.View>
-
+        {/* OFFICIAL ILOCOS NORTE PNP EMBLEM */}
+        <View style={styles.logoStage}>
+          <Animated.Image 
+            source={require('../assets/logo.png')} 
+            style={[styles.logoImage, { opacity: logoOpacity }]} 
+            resizeMode="contain"
+          />
         </View>
 
         {/* Patrolling Sector Ground Plane Grid */}
         <View style={styles.gridGroundSection}>
-          <View style={[styles.solidGroundRule, { backgroundColor: colors.textSec, opacity: 0.2 }]} />
+          <View style={[styles.solidGroundRule, { backgroundColor: colors.textSec, opacity: 0.25 }]} />
           <Animated.View style={[styles.dashedMovingGrid, { transform: [{ translateX: gridTranslateX }] }]}>
             {Array.from({ length: 15 }).map((_, i) => (
               <View 
                 key={i} 
                 style={[
                   styles.movingGridTick, 
-                  { backgroundColor: i % 2 === 0 ? colors.tacticalGold : colors.laserGreen, opacity: 0.6 }
+                  { backgroundColor: i % 2 === 0 ? colors.tacticalGold : colors.laserGreen, opacity: 0.7 }
                 ]} 
               />
             ))}
@@ -251,10 +181,10 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
         <View style={styles.terminalOverlay}>
           <View style={styles.statusBarBlock}>
             <View style={[styles.ledIndicator, { backgroundColor: colors.laserGreen }]} />
-            <Text style={[styles.systemOnlineText, { color: colors.laserGreen }]}>SECURING SYSTEM CHANNEL</Text>
+            <Text style={[styles.systemOnlineText, { color: colors.laserGreen }]}>SECURING COMS CHANNEL</Text>
           </View>
           
-          <Text style={[styles.terminalText, { color: colors.textSec }]} numberOfLines={1}>
+          <Text style={[styles.terminalText, { color: colors.textMain }]} numberOfLines={1}>
             {`> `}{terminalLog}
           </Text>
 
@@ -262,7 +192,11 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
           <View style={[styles.pnpProgressBarBg, { backgroundColor: isDarkTheme ? '#1A2333' : '#E2E8F0' }]}>
             <View style={[styles.pnpProgressBarFill, { width: `${percent}%`, backgroundColor: colors.tacticalGold }]} />
           </View>
-          <Text style={[styles.percentLabel, { color: colors.textMain }]}>{percent}% CONNECTED</Text>
+          
+          <View style={styles.percentageRow}>
+            <Text style={[styles.percentLabel, { color: colors.textSec }]}>SECURE TELEMETRY BINDING</Text>
+            <Text style={[styles.percentLabelVal, { color: colors.tacticalGold }]}>{percent}%</Text>
+          </View>
         </View>
 
       </Animated.View>
@@ -285,255 +219,128 @@ const styles = StyleSheet.create({
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
-    top: -20,
+    top: 50,
     zIndex: -1,
   },
   radialWave: {
     position: 'absolute',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderStyle: 'dashed',
-    opacity: 0.08,
+    opacity: 0.12,
   },
   headerBlock: {
     alignItems: 'center',
-    marginBottom: 45,
+    marginBottom: 35,
   },
   brandPre: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     letterSpacing: 2.5,
     marginBottom: 6,
     textAlign: 'center',
   },
   brandTitle: {
-    fontSize: 27,
+    fontSize: 32,
     fontWeight: '900',
     letterSpacing: 1.5,
     textAlign: 'center',
   },
-  officerStage: {
+  brandSub: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 4,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  logoStage: {
     width: 200,
-    height: 190,
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
-    marginBottom: 20,
+    marginBottom: 35,
   },
-  headAssembly: {
-    alignItems: 'center',
-    position: 'relative',
-    zIndex: 10,
-    marginBottom: -2,
-  },
-  policeCap: {
-    width: 32,
-    height: 18,
-    position: 'relative',
-    alignItems: 'center',
-    zIndex: 15,
-  },
-  capVisor: {
-    width: 36,
-    height: 5,
-    borderRadius: 2,
-    position: 'absolute',
-    bottom: 0,
-  },
-  capCrown: {
-    width: 28,
-    height: 14,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    position: 'absolute',
-    bottom: 3,
-  },
-  capGoldStrip: {
-    width: 28,
-    height: 2,
-    position: 'absolute',
-    bottom: 3,
-  },
-  capGoldStar: {
-    width: 4,
-    height: 4,
-    position: 'absolute',
-    top: 3,
-  },
-  faceSphere: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -2,
-    zIndex: 8,
-  },
-  shadesRim: {
-    width: 20,
-    height: 6,
-    borderRadius: 2,
-    marginTop: -2,
-  },
-  neckStem: {
-    width: 8,
-    height: 8,
-    marginTop: -4,
-    zIndex: 5,
-  },
-  torsoShell: {
-    width: 46,
-    height: 54,
-    borderRadius: 8,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 3,
-  },
-  vestPatrolBadge: {
-    width: 8,
-    height: 10,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
-    position: 'absolute',
-    top: 6,
-    left: 8,
-  },
-  vestUtilityText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginTop: 18,
-  },
-  armLeftAxis: {
-    width: 10,
-    height: 76, // 38 * 2
-    position: 'absolute',
-    left: -8,
-    top: -15, // shifted to align hip center
-    justifyContent: 'flex-end',
-  },
-  armRightAxis: {
-    width: 10,
-    height: 76, // 38 * 2
-    position: 'absolute',
-    right: -8,
-    top: -15,
-    justifyContent: 'flex-end',
-  },
-  armSleeve: {
-    width: 8,
-    height: 30,
-    borderRadius: 4,
-  },
-  handKnuckles: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    marginTop: -2,
-  },
-  legLeftPivot: {
-    position: 'absolute',
-    top: 56, // Adjusted upwards to account for the pivot container's top-half spacer
-    left: 84,
-    width: 14,
-    height: 100, // 50 * 2
-    justifyContent: 'flex-end',
-    zIndex: 1,
-  },
-  legRightPivot: {
-    position: 'absolute',
-    top: 56,
-    right: 84,
-    width: 14,
-    height: 100, // 50 * 2
-    justifyContent: 'flex-end',
-    zIndex: 1,
-  },
-  pantLeg: {
-    width: 10,
-    height: 42,
-    borderRadius: 3,
-  },
-  heavyOfficerBoot: {
-    width: 15,
-    height: 10,
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 3,
-    borderBottomLeftRadius: 3,
-    marginTop: -4,
-    alignSelf: 'flex-start',
+  logoImage: {
+    width: 170,
+    height: 195,
   },
   gridGroundSection: {
     width: '100%',
-    height: 30,
+    height: 35,
     position: 'relative',
     overflow: 'hidden',
-    marginBottom: 40,
+    marginBottom: 35,
   },
   solidGroundRule: {
     width: '100%',
-    height: 3,
-    borderRadius: 1,
+    height: 4,
+    borderRadius: 2,
   },
   dashedMovingGrid: {
     flexDirection: 'row',
     width: width + 120,
-    marginTop: 10,
+    marginTop: 12,
     paddingLeft: 20,
   },
   movingGridTick: {
-    width: 12,
-    height: 4,
-    borderRadius: 2,
+    width: 16,
+    height: 5,
+    borderRadius: 2.5,
     marginRight: 24,
   },
   terminalOverlay: {
     width: '100%',
-    padding: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    borderRadius: 12,
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   statusBarBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   ledIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
   },
   systemOnlineText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 1.2,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.5,
   },
   terminalText: {
-    fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'System', // clean sans cross-system font
-    marginBottom: 14,
-    height: 22,
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: 'System',
+    marginBottom: 16,
+    height: 24,
   },
   pnpProgressBarBg: {
-    height: 6,
-    borderRadius: 3,
+    height: 10,
+    borderRadius: 5,
     width: '100%',
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   pnpProgressBarFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 5,
+  },
+  percentageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   percentLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  percentLabelVal: {
+    fontSize: 16,
     fontWeight: '900',
-    textAlign: 'right',
-    letterSpacing: 0.8,
   },
 });

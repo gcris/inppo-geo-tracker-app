@@ -12,7 +12,20 @@ data class PersonnelEntity(
     val fullname: String,
     val unitId: String,
     val isApproved: Boolean,
-    val role: String
+    val role: String,
+    val email: String? = null,
+    val password: String? = null,
+    val rank_id: String? = null,
+    val unit_id: String? = null,
+    val designation: String? = null,
+    val phone_number: String? = null,
+    val viber_number: String? = null
+)
+
+@Entity(tableName = "rank")
+data class RankEntity(
+    @PrimaryKey val id: String,
+    val rankName: String
 )
 
 @Entity(tableName = "unit")

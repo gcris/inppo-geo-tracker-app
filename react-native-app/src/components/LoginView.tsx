@@ -25,6 +25,7 @@ interface LoginViewProps {
   onRequestForeground: () => Promise<boolean>;
   onRequestBackground: () => Promise<boolean>;
   onEnableGpsInline: () => Promise<boolean>;
+  onGoToRegister?: () => void;
 }
 
 export const LoginView = ({ 
@@ -39,6 +40,7 @@ export const LoginView = ({
   onRequestForeground,
   onRequestBackground,
   onEnableGpsInline,
+  onGoToRegister,
 }: LoginViewProps) => {
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
@@ -204,45 +206,12 @@ export const LoginView = ({
 
       <View style={{ width: '100%', alignItems: 'center', paddingVertical: 10 }}>
         {/* PNP Gold Emblem Representation */}
-        <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-          <View style={{
-            width: 80,
-            height: 94,
-            backgroundColor: '#1E3A8A', // PnpNavyPrimary
-            borderWidth: 3.5,
-            borderColor: '#FACC15', // PnpGoldAccent
-            borderRadius: 20,
-            borderBottomLeftRadius: 40,
-            borderBottomRightRadius: 40,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#FACC15',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: isDarkTheme ? 0.35 : 0.15,
-            shadowRadius: 6,
-            elevation: 5,
-          }}>
-            {/* Centered Golden Star */}
-            <Text style={{ fontSize: 36, color: '#FACC15', position: 'absolute', top: 12 }}>⭐</Text>
-            {/* Central core circle */}
-            <View style={{
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              backgroundColor: '#0B121F',
-              justifyContent: 'center',
-              alignItems: 'center',
-              position: 'absolute',
-              bottom: 18,
-            }}>
-              <View style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: '#10B981',
-              }} />
-            </View>
-          </View>
+        <View style={{ width: 110, height: 130, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+          <Image 
+            source={require('../assets/logo.png')} 
+            style={{ width: 110, height: 125 }} 
+            resizeMode="contain" 
+          />
         </View>
 
         <Text style={[styles.pnpTitle, { color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontWeight: 'bold', fontSize: 16, letterSpacing: 2, textAlign: 'center' }]}>
@@ -490,6 +459,25 @@ export const LoginView = ({
                 </TouchableOpacity>
               </View>
             </View>
+
+            {onGoToRegister && (
+              <TouchableOpacity 
+                style={{ 
+                  marginTop: 18, 
+                  paddingVertical: 10, 
+                  borderRadius: 8, 
+                  borderWidth: 1, 
+                  borderStyle: 'dashed',
+                  borderColor: isDarkTheme ? '#475569' : '#CBD5E1', 
+                  alignItems: 'center' 
+                }}
+                onPress={onGoToRegister}
+              >
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#3B82F6' : '#1D4ED8' }}>
+                  🆕 RECRUIT OFFICER REGISTRATION
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={[styles.formCard, { width: '100%', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0', backgroundColor: isDarkTheme ? '#142035' : '#FFFFFF' }]}>
