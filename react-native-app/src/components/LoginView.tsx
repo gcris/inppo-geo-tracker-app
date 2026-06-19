@@ -7,9 +7,11 @@ import {
   ScrollView, 
   ActivityIndicator,
   Alert,
-  Clipboard
+  Clipboard,
+  Image
 } from 'react-native';
 import { getStyles, getThemeColors } from '../theme/styles';
+import { getOTPAuthUri } from '../services/totp';
 
 interface LoginViewProps {
   isGpsEnabled: boolean;
@@ -18,6 +20,11 @@ interface LoginViewProps {
   onOpenSettings: () => void;
   isDarkTheme: boolean;
   onToggleTheme: () => void;
+  foregroundGranted: boolean | null;
+  backgroundGranted: boolean | null;
+  onRequestForeground: () => Promise<boolean>;
+  onRequestBackground: () => Promise<boolean>;
+  onEnableGpsInline: () => Promise<boolean>;
 }
 
 export const LoginView = ({ 
@@ -26,7 +33,12 @@ export const LoginView = ({
   onLogin, 
   onOpenSettings,
   isDarkTheme,
-  onToggleTheme
+  onToggleTheme,
+  foregroundGranted,
+  backgroundGranted,
+  onRequestForeground,
+  onRequestBackground,
+  onEnableGpsInline,
 }: LoginViewProps) => {
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
@@ -242,28 +254,98 @@ export const LoginView = ({
 
         <View style={{ height: 32 }} />
 
-        {/* GPS ALERT BAR IF DISABLED */}
-        {!isGpsEnabled && (
+        {/* ACCESS SYSTEM STATUS PANEL */}
+        {(foregroundGranted === false || backgroundGranted === false || !isGpsEnabled) && (
           <View style={{
             width: '100%',
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            backgroundColor: isDarkTheme ? '#1E293B' : '#F1F5F9',
             borderWidth: 1,
             borderColor: '#EF4444',
             borderRadius: 12,
             padding: 16,
             marginBottom: 16,
-            alignItems: 'center',
           }}>
-            <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 14 }}>⚠️ DEVICE GPS IS DISABLED</Text>
-            <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#151515', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-              PNP Geo-Tracking requires high-accuracy system GPS services to be enabled globally. Please turn on Location/GPS below.
+            <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>
+              🚨 INTERNAL COMPLIANCE ACCESS EXCEPTION
             </Text>
-            <TouchableOpacity 
-              onPress={onOpenSettings}
-              style={{ backgroundColor: '#EF4444', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, marginTop: 12 }}
-            >
-              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>ENABLE DEVICE LOCATION</Text>
-            </TouchableOpacity>
+            <Text style={{ color: isDarkTheme ? '#94A3B8' : '#475569', fontSize: 11, textAlign: 'center', marginBottom: 12, lineHeight: 15 }}>
+              PNP Geo-Tracking requires active security clearances. Please grant accurate telemetry credentials below without going outside this terminal.
+            </Text>
+
+            {/* Foreground GPS */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderColor: isDarkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                  1. Fine GPS Telemetry {foregroundGranted ? '✅' : '❌'}
+                </Text>
+                <Text style={{ fontSize: 10, color: isDarkTheme ? '#94A3B8' : '#475569' }}>
+                  Required for real-time tracking during shifts.
+                </Text>
+              </View>
+              {!foregroundGranted && (
+                <TouchableOpacity
+                  onPress={onRequestForeground}
+                  style={{ backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 11 }}>LOCK ACCESS</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Background Location */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderColor: isDarkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                  2. Background Signals {backgroundGranted ? '✅' : '❌'}
+                </Text>
+                <Text style={{ fontSize: 10, color: isDarkTheme ? '#94A3B8' : '#475569' }}>
+                  Transmits tracking logs securely while minimized.
+                </Text>
+              </View>
+              {foregroundGranted && !backgroundGranted && (
+                <TouchableOpacity
+                  onPress={onRequestBackground}
+                  style={{ backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 11 }}>LOCK BG ACCESS</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* System GPS */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                  3. Hardware GPS {isGpsEnabled ? '✅' : '❌'}
+                </Text>
+                <Text style={{ fontSize: 10, color: isDarkTheme ? '#94A3B8' : '#475569' }}>
+                  Device level location services toggle.
+                </Text>
+              </View>
+              {!isGpsEnabled && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    const gpsOn = await onEnableGpsInline();
+                    if (!gpsOn) {
+                      Alert.alert(
+                        "Permission Fallback",
+                        "Could not auto-enable device location. Please configure it via the device system settings.",
+                        [
+                          { text: "Open Settings", onPress: onOpenSettings },
+                          { text: "Cancel", style: "cancel" }
+                        ]
+                      );
+                    }
+                  }}
+                  disabled={gpsLoading}
+                  style={{ backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 11 }}>
+                    {gpsLoading ? "INITIALIZING..." : "ACTIVATE"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
@@ -439,43 +521,72 @@ export const LoginView = ({
               Your badge profile is protected with Two-Factor Identification. Enter the current 6-digit code from Google Authenticator to join active patrol shift status.
             </Text>
 
-            {mfaSecret ? (
-              <View style={{
-                backgroundColor: isDarkTheme ? '#0B121F' : '#F8FAFC',
-                padding: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
-                marginBottom: 16,
-                alignItems: 'center'
-              }}>
-                <Text style={{ color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 }}>
-                  GOOGLE AUTHENTICATOR SETUP KEY
-                </Text>
-                <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 1 }}>
-                  {mfaSecret}
-                </Text>
-                <TouchableOpacity 
-                  style={{
-                    backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
-                    paddingVertical: 5,
-                    paddingHorizontal: 12,
-                    borderRadius: 4,
-                    marginTop: 8,
-                    borderColor: isDarkTheme ? '#334155' : '#CBD5E1',
-                    borderWidth: 1
-                  }}
-                  onPress={() => {
-                    Clipboard.setString(mfaSecret);
-                    Alert.alert("Secret Copied", "Google Authenticator secret copied to device clipboard. Standard key input type inside your device Authenticator app.");
-                  }}
-                >
-                  <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 10, fontWeight: 'bold' }}>
-                    📋 COPY SETUP KEY
+            {mfaSecret ? (() => {
+              const otpauthUri = getOTPAuthUri(email || 'patroller', mfaSecret);
+              const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(otpauthUri)}`;
+              return (
+                <View style={{
+                  backgroundColor: isDarkTheme ? '#0B121F' : '#F8FAFC',
+                  padding: 16,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                  marginBottom: 16,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ color: isDarkTheme ? '#FACC15' : '#1E3A8A', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 12 }}>
+                    GOOGLE AUTHENTICATOR QR SETUP
                   </Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
+                  
+                  {/* QR Code Container with white background for perfect scanning */}
+                  <View style={{
+                    backgroundColor: '#FFFFFF',
+                    padding: 8,
+                    borderRadius: 8,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}>
+                    <Image 
+                      source={{ uri: qrCodeUrl }} 
+                      style={{ width: 160, height: 160 }} 
+                      resizeMode="contain"
+                    />
+                  </View>
+
+                  <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 11, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 1, marginBottom: 4 }}>
+                    Key: {mfaSecret}
+                  </Text>
+                  <Text style={{ color: isDarkTheme ? '#94A3B8' : '#64748B', fontSize: 9, textAlign: 'center', marginBottom: 8, paddingHorizontal: 10 }}>
+                    Scan this QR code with your Google Authenticator app or copy the setup key below manually.
+                  </Text>
+                  
+                  <TouchableOpacity 
+                    style={{
+                      backgroundColor: isDarkTheme ? '#1E293B' : '#E2E8F0',
+                      paddingVertical: 5,
+                      paddingHorizontal: 12,
+                      borderRadius: 4,
+                      borderColor: isDarkTheme ? '#334155' : '#CBD5E1',
+                      borderWidth: 1
+                    }}
+                    onPress={() => {
+                      Clipboard.setString(mfaSecret);
+                      Alert.alert("Secret Copied", "Google Authenticator secret copied to device clipboard. Standard key input type inside your device Authenticator app.");
+                    }}
+                  >
+                    <Text style={{ color: isDarkTheme ? '#FFFFFF' : '#0F172A', fontSize: 10, fontWeight: 'bold' }}>
+                      📋 COPY SETUP KEY
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })() : null}
 
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? 'rgba(248,250,252,0.7)' : 'rgba(15,23,42,0.7)', marginBottom: 6, textAlign: 'center' }}>
               SIX-DIGIT SECURITY TOKEN

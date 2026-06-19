@@ -40,11 +40,13 @@ import com.example.ui.theme.*
 fun LoginScreen(
     viewModel: MainViewModel,
     onEnableLocation: () -> Unit = {},
+    onRequestPermissions: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val loginState by viewModel.loginState.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val isLocationEnabled by viewModel.isLocationEnabled.collectAsState()
+    val isPermissionGranted by viewModel.isPermissionGranted.collectAsState()
     var emailInput by remember { mutableStateOf("itsme.gerrycriscariaga@gmail.com") }
     var passwordInput by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -146,7 +148,56 @@ fun LoginScreen(
                 .fillMaxWidth()
                 .widthIn(max = 480.dp)
         ) {
-            if (!isLocationEnabled) {
+            if (!isPermissionGranted) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = PnpStatusError.copy(alpha = 0.15f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PnpStatusError)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Permission Error",
+                                tint = PnpStatusError,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "LOCATION PERMISSIONS REQUIRED",
+                                fontWeight = FontWeight.Bold,
+                                color = PnpStatusError,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "PNP Geo-Tracking requires active location permissions to map patrol coordinates safely. Please grant access below.",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                onRequestPermissions()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PnpStatusError)
+                        ) {
+                            Text("GRANT LOCATION PERMISSIONS", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            } else if (!isLocationEnabled) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()

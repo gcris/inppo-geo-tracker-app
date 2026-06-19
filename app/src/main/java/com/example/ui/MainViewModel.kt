@@ -41,12 +41,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLocationEnabled = MutableStateFlow(true)
     val isLocationEnabled: StateFlow<Boolean> = _isLocationEnabled.asStateFlow()
 
+    private val _isPermissionGranted = MutableStateFlow(true)
+    val isPermissionGranted: StateFlow<Boolean> = _isPermissionGranted.asStateFlow()
+
     init {
         checkLocationEnabledState()
     }
 
     fun checkLocationEnabledState() {
         val context = getApplication<Application>().applicationContext
+        val fineLocationGranted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val coarseLocationGranted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        _isPermissionGranted.value = fineLocationGranted || coarseLocationGranted
+
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
         val isGpsEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ?: false
         val isNetworkEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ?: false

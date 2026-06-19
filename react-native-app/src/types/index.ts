@@ -6,6 +6,7 @@ export interface Personnel {
   unitId: string;
   isApproved: boolean;
   role: string;
+  email?: string;
 }
 
 export interface Unit {

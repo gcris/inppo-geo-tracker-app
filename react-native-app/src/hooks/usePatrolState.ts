@@ -26,6 +26,25 @@ import { supabase, isSupabaseConfigured } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateTOTP, generateRandomSecret } from '../services/totp';
 
+export const resolveEmail = (input: string): string => {
+  const normalized = input.trim().toLowerCase();
+  if (normalized.includes('@')) {
+    return normalized;
+  }
+  // Try to map badge number / username to email
+  if (normalized.includes('4820') || normalized.includes('gerry')) {
+    return 'itsme.gerrycriscariaga@gmail.com';
+  }
+  if (normalized.includes('7700') || normalized.includes('magalong')) {
+    return 'magalong@pnp.gov.ph';
+  }
+  if (normalized.includes('1402') || normalized.includes('dalisay')) {
+    return 'cardalisay@pnp.gov.ph';
+  }
+  // Fallback
+  return `${normalized}@pnp.gov.ph`;
+};
+
 export const usePatrolState = () => {
   const [personnel, setPersonnel] = useState<Personnel | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -35,23 +54,75 @@ export const usePatrolState = () => {
   
   const [isShiftActive, setIsShiftActive] = useState<boolean>(false);
   const [autoSync, setAutoSync] = useState<boolean>(true);
+  
   const [isGpsEnabled, setIsGpsEnabled] = useState<boolean>(false);
+  const [foregroundGranted, setForegroundGranted] = useState<boolean | null>(null);
+  const [backgroundGranted, setBackgroundGranted] = useState<boolean | null>(null);
+  
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const [is2FAEnabled, setIs2FAEnabled] = useState<boolean>(false);
 
-  // Checks device's system GPS status
+  // Checks device's system GPS and permission status
   const checkLocationPermissionState = useCallback(async () => {
     try {
+      const { status: fgStatus } = await Location.getForegroundPermissionsAsync();
+      const { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
       const enabled = await Location.hasServicesEnabledAsync();
+      
+      setForegroundGranted(fgStatus === 'granted');
+      setBackgroundGranted(bgStatus === 'granted');
       setIsGpsEnabled(enabled);
-      return enabled;
+      
+      return enabled && fgStatus === 'granted';
     } catch {
       setIsGpsEnabled(false);
       return false;
     }
   }, []);
+
+  const requestForegroundPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      const granted = status === 'granted';
+      setForegroundGranted(granted);
+      await checkLocationPermissionState();
+      return granted;
+    } catch (e) {
+      console.warn("Foreground permission request error", e);
+      return false;
+    }
+  };
+
+  const requestBackgroundPermission = async () => {
+    try {
+      const { status } = await Location.requestBackgroundPermissionsAsync();
+      const granted = status === 'granted';
+      setBackgroundGranted(granted);
+      await checkLocationPermissionState();
+      return granted;
+    } catch (e) {
+      console.warn("Background permission request error", e);
+      return false;
+    }
+  };
+
+  const enableGpsInline = async () => {
+    try {
+      setGpsLoading(true);
+      await Location.enableNetworkProviderAsync();
+      const enabled = await Location.hasServicesEnabledAsync();
+      setIsGpsEnabled(enabled);
+      await checkLocationPermissionState();
+      setGpsLoading(false);
+      return enabled;
+    } catch (e) {
+      setGpsLoading(false);
+      console.warn("Enable network provider error", e);
+      return false;
+    }
+  };
 
   const loadLogsAndStats = useCallback(async () => {
     try {
@@ -111,7 +182,20 @@ export const usePatrolState = () => {
     const check2FA = async () => {
       if (personnel) {
         try {
-          const secret = await AsyncStorage.getItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
+          const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
+          // Attempt using new clear key first, then fallback/migrate from old key if present
+          let secret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`);
+          if (!secret) {
+            secret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`);
+            if (!secret) {
+              secret = await AsyncStorage.getItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
+            }
+            if (secret) {
+              await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`, secret);
+              await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
+              await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
+            }
+          }
           setIs2FAEnabled(!!secret);
         } catch (e) {
           console.warn("Error checking 2FA state", e);
@@ -135,7 +219,12 @@ export const usePatrolState = () => {
         return false;
       }
 
-      await AsyncStorage.setItem(`@pnp_2fa_secret_${personnel.badgeNumber}`, secret);
+      const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
+      await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`, secret);
+      // Clean up legacy keys if they are still around
+      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
+      await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
+      
       setIs2FAEnabled(true);
       Alert.alert("2FA Secured", "Google Authenticator two-factor authentication has been successfully locked to your PNP badge profile!");
       return true;
@@ -149,7 +238,10 @@ export const usePatrolState = () => {
   const disable2FA = async () => {
     if (!personnel) return;
     try {
-      await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`);
+      const emailKey = resolveEmail(personnel.email || personnel.badgeNumber);
+      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${emailKey}`);
+      await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${personnel.badgeNumber}`).catch(() => {});
+      await AsyncStorage.removeItem(`@pnp_2fa_secret_${personnel.badgeNumber}`).catch(() => {});
       setIs2FAEnabled(false);
       Alert.alert("2FA Disabled", "Google Authenticator is now disabled. Warning: Your officer profile is no longer protected by MFA.");
     } catch (e) {
@@ -223,13 +315,27 @@ export const usePatrolState = () => {
       badge = trimmedEmail.toUpperCase();
     }
 
-    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS BADGE BEFORE DOING LOGINS - FORCED COMPULSORY
+    const targetEmail = resolveEmail(trimmedEmail);
+
+    // CHECK GOOGLE AUTHENTICATOR (2FA) SECRET FOR THIS EMAIL BEFORE DOING LOGINS - FORCED COMPULSORY
     try {
-      let storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
+      let storedSecret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`);
       if (!storedSecret) {
-        // Force-seed a dynamic random security key for this badge, making Google Authenticator strictly mandatory
+        // Fallback or migration check from legacy badge keys
+        storedSecret = await AsyncStorage.getItem(`@pnp_google_authenticator_mfa_secret_${badge}`);
+        if (!storedSecret) {
+          storedSecret = await AsyncStorage.getItem(`@pnp_2fa_secret_${badge}`);
+        }
+        if (storedSecret) {
+          await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`, storedSecret);
+          await AsyncStorage.removeItem(`@pnp_google_authenticator_mfa_secret_${badge}`).catch(() => {});
+          await AsyncStorage.removeItem(`@pnp_2fa_secret_${badge}`).catch(() => {});
+        }
+      }
+      if (!storedSecret) {
+        // Force-seed a dynamic random security key for this email, making Google Authenticator strictly mandatory
         const randomSecret = generateRandomSecret();
-        await AsyncStorage.setItem(`@pnp_2fa_secret_${badge}`, randomSecret);
+        await AsyncStorage.setItem(`@pnp_google_authenticator_mfa_secret_${targetEmail}`, randomSecret);
         storedSecret = randomSecret;
       }
 
@@ -340,6 +446,10 @@ export const usePatrolState = () => {
 
       if (!pUser.isApproved) {
         return 'PENDING_APPROVAL';
+      }
+
+      if (pUser) {
+        pUser.email = resolveEmail(trimmedEmail);
       }
 
       // Successful verification
@@ -686,6 +796,8 @@ export const usePatrolState = () => {
     unsyncedCount,
     isShiftActive,
     isGpsEnabled,
+    foregroundGranted,
+    backgroundGranted,
     gpsLoading,
     isSyncing,
     autoSync,
@@ -700,5 +812,8 @@ export const usePatrolState = () => {
     is2FAEnabled,
     enable2FA,
     disable2FA,
+    requestForegroundPermission,
+    requestBackgroundPermission,
+    enableGpsInline,
   };
 };

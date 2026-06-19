@@ -1,7 +1,17 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { insertVehicleLog } from './database';
+
+// Configure how notifications should be handled when the app is in the foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export const LOCATION_TASK_NAME = 'pnp-background-patrol-task';
 
@@ -140,9 +150,46 @@ export const startBackgroundUpdates = async (vehicleId: string) => {
     throw new Error('System GPS/Location is currently turned off. Please enable device location.');
   }
 
+  // Request notifications permission and register Category
+  try {
+    const { status: notifStatus } = await Notifications.requestPermissionsAsync();
+    if (notifStatus === 'granted') {
+      await Notifications.setNotificationCategoryAsync('patrol-session', [
+        {
+          identifier: 'sos-button',
+          buttonTitle: '🚨 TRIGGER CRITICAL SOS',
+          options: {
+            opensAppToForeground: true,
+          },
+        },
+      ]);
+    }
+  } catch (e) {
+    console.warn('Failed to set notification category/permissions', e);
+  }
+
   // Save vehicle ID so background task can query it even when app is closed/minimized
   await AsyncStorage.setItem('@pnp_active_vehicle_id', vehicleId);
   await AsyncStorage.setItem('@pnp_shift_status', 'ACTIVE');
+
+  // Trigger our sticky/ongoing local notification containing the interactive SOS action
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'active-patrol-notif',
+      content: {
+        title: "🚨 PNP Active Patrol Status",
+        body: "Your foot beat coordinates are logging in the background. Press below for critical assistance.",
+        categoryIdentifier: 'patrol-session',
+        sticky: true,
+        autoDismiss: false,
+        color: "#EF4444",
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.warn('Failed to display persistent patrol notification', e);
+  }
 
   await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
     accuracy: Location.Accuracy.BestForNavigation,
@@ -162,6 +209,15 @@ export const startBackgroundUpdates = async (vehicleId: string) => {
 export const stopBackgroundUpdates = async () => {
   await AsyncStorage.removeItem('@pnp_active_vehicle_id');
   await AsyncStorage.setItem('@pnp_shift_status', 'OFF_DUTY');
+  
+  // Clear persistent local system notifications
+  try {
+    await Notifications.dismissNotificationAsync('active-patrol-notif');
+    await Notifications.dismissAllNotificationsAsync();
+  } catch (e) {
+    console.warn('Failed to clear persistent local notifications', e);
+  }
+
   const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
   if (started) {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);

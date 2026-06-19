@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar, SafeAreaView, View, Text, TouchableOpacity } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 import { usePatrolState } from './src/hooks/usePatrolState';
 import { getStyles, getThemeColors } from './src/theme/styles';
 import { LoginView } from './src/components/LoginView';
 import { DashboardView } from './src/components/DashboardView';
 import { TopCommandHeader } from './src/components/TopCommandHeader';
+import { AnimatedSplashScreen } from './src/components/AnimatedSplashScreen';
 
 export default function App() {
   // Police Dark Tactical Theme is active by default to replicate native Android exactly
   const [isDarkTheme, setIsDarkTheme] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
   
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
@@ -22,6 +25,8 @@ export default function App() {
     unsyncedCount,
     isShiftActive,
     isGpsEnabled,
+    foregroundGranted,
+    backgroundGranted,
     gpsLoading,
     isSyncing,
     autoSync,
@@ -36,11 +41,36 @@ export default function App() {
     is2FAEnabled,
     enable2FA,
     disable2FA,
+    requestForegroundPermission,
+    requestBackgroundPermission,
+    enableGpsInline,
   } = usePatrolState();
+
+  // Listen for the system-level persistent notification's SOS button clicks
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      if (response.actionIdentifier === 'sos-button') {
+        // Trigger critical SOS sequence immediately
+        triggerEmergencySOS();
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [triggerEmergencySOS]);
 
   const handleToggleTheme = () => {
     setIsDarkTheme(!isDarkTheme);
   };
+
+  if (showSplash) {
+    return (
+      <AnimatedSplashScreen 
+        onFinish={() => setShowSplash(false)} 
+        isDarkTheme={isDarkTheme}
+      />
+    );
+  }
 
   // If there's no authenticated officer, render target credentials login view
   if (!personnel) {
@@ -52,11 +82,16 @@ export default function App() {
         />
         <LoginView
           isGpsEnabled={isGpsEnabled}
+          foregroundGranted={foregroundGranted}
+          backgroundGranted={backgroundGranted}
           gpsLoading={gpsLoading}
           onLogin={login}
           onOpenSettings={openSystemSettings}
           isDarkTheme={isDarkTheme}
           onToggleTheme={handleToggleTheme}
+          onRequestForeground={requestForegroundPermission}
+          onRequestBackground={requestBackgroundPermission}
+          onEnableGpsInline={enableGpsInline}
         />
       </SafeAreaView>
     );
@@ -105,6 +140,8 @@ export default function App() {
         schedule={schedule}
         isShiftActive={isShiftActive}
         isGpsEnabled={isGpsEnabled}
+        foregroundGranted={foregroundGranted}
+        backgroundGranted={backgroundGranted}
         unsyncedCount={unsyncedCount}
         logs={logs}
         isSyncing={isSyncing}
@@ -121,6 +158,9 @@ export default function App() {
         onDisable2FA={disable2FA}
         
         isDarkTheme={isDarkTheme}
+        onRequestForeground={requestForegroundPermission}
+        onRequestBackground={requestBackgroundPermission}
+        onEnableGpsInline={enableGpsInline}
       />
     </SafeAreaView>
   );

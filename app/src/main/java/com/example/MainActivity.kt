@@ -109,12 +109,14 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(
                             viewModel = vm,
                             onEnableLocation = { checkAndRequestLocationSettings() },
+                            onRequestPermissions = { requestOperationalPermissions() },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
                         DashboardScreen(
                             viewModel = vm,
                             onEnableLocation = { checkAndRequestLocationSettings() },
+                            onRequestPermissions = { requestOperationalPermissions() },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }

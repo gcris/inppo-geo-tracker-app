@@ -7,11 +7,12 @@ import {
   ActivityIndicator,
   Switch,
   Clipboard,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
 import { Personnel, Vehicle, VehicleLog, Schedule } from '../types';
 import { getStyles, getThemeColors } from '../theme/styles';
-import { generateRandomSecret } from '../services/totp';
+import { generateRandomSecret, getOTPAuthUri } from '../services/totp';
 
 interface DashboardViewProps {
   personnel: Personnel | null;
@@ -36,6 +37,11 @@ interface DashboardViewProps {
   onDisable2FA: () => Promise<void>;
   
   isDarkTheme: boolean;
+  foregroundGranted: boolean | null;
+  backgroundGranted: boolean | null;
+  onRequestForeground: () => Promise<boolean>;
+  onRequestBackground: () => Promise<boolean>;
+  onEnableGpsInline: () => Promise<boolean>;
 }
 
 export const DashboardView = ({
@@ -60,6 +66,11 @@ export const DashboardView = ({
   onDisable2FA,
   
   isDarkTheme,
+  foregroundGranted,
+  backgroundGranted,
+  onRequestForeground,
+  onRequestBackground,
+  onEnableGpsInline,
 }: DashboardViewProps) => {
   const styles = getStyles(isDarkTheme);
   const colors = getThemeColors(isDarkTheme);
@@ -122,15 +133,86 @@ export const DashboardView = ({
       contentContainerStyle={styles.dashboardContainer}
       keyboardShouldPersistTaps="handled"
     >
-      {/* GPS Alert Ribbon */}
-      {!isGpsEnabled && (
-        <View style={styles.dangerAlertBar}>
-          <Text style={styles.dangerAlertText}>
-            ⚠️ PHONE'S INTERNAL GPS DISCONNECTED! ACTIVATE DEVICE LOCATION.
+      {/* ACCESS SYSTEM STATUS PANEL */}
+      {(foregroundGranted === false || backgroundGranted === false || !isGpsEnabled) && (
+        <View style={{
+          backgroundColor: isDarkTheme ? '#1E293B' : '#F1F5F9',
+          borderWidth: 1,
+          borderColor: '#EF4444',
+          borderRadius: 12,
+          padding: 16,
+          marginVertical: 12,
+          marginHorizontal: 16,
+        }}>
+          <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 13, textAlign: 'center', marginBottom: 4 }}>
+            🚨 SECURITY COMPLIANCE EXCEPTION
           </Text>
-          <TouchableOpacity onPress={onOpenSettings}>
-            <Text style={styles.dangerSettingsLink}>[ENABLE NOW]</Text>
-          </TouchableOpacity>
+          <Text style={{ color: isDarkTheme ? '#94A3B8' : '#475569', fontSize: 11, textAlign: 'center', marginBottom: 12, lineHeight: 14 }}>
+            System tracking requires active location signals. Enable services below inside this app:
+          </Text>
+
+          {/* Foreground */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderColor: isDarkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                1. Fine Location {foregroundGranted ? '✅' : '❌'}
+              </Text>
+            </View>
+            {!foregroundGranted && (
+              <TouchableOpacity
+                onPress={onRequestForeground}
+                style={{ backgroundColor: '#EF4444', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 5 }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }}>REQUEST</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Background */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderColor: isDarkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                2. Background Signals {backgroundGranted ? '✅' : '❌'}
+              </Text>
+            </View>
+            {foregroundGranted && !backgroundGranted && (
+              <TouchableOpacity
+                onPress={onRequestBackground}
+                style={{ backgroundColor: '#EF4444', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 5 }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }}>ACTIVATE BG</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* GPS Services */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkTheme ? '#FFFFFF' : '#0F172A' }}>
+                3. Global Hardware GPS {isGpsEnabled ? '✅' : '❌'}
+              </Text>
+            </View>
+            {!isGpsEnabled && (
+              <TouchableOpacity
+                onPress={async () => {
+                  const resolved = await onEnableGpsInline();
+                  if (!resolved) {
+                    Alert.alert(
+                      "GPS Action Required",
+                      "Could not auto-toggle device location services. Please configure GPS via system settings.",
+                      [
+                        { text: "Open settings", onPress: onOpenSettings },
+                        { text: "Cancel", style: "cancel" }
+                      ]
+                    );
+                  }
+                }}
+                style={{ backgroundColor: '#EF4444', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 5 }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }}>AUTO ENABLE</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
@@ -597,11 +679,30 @@ export const DashboardView = ({
                 </Text>
 
                 <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentAmber, marginBottom: 4 }}>STEP 2: DETAILS INTEGRATIONS</Text>
-                <View style={{ backgroundColor: isDarkTheme ? '#0F172A' : '#F8FAFC', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: colors.borderBlue, marginBottom: 10 }}>
-                  <Text style={{ fontSize: 9, color: colors.textSecondary }}>Account Reference:</Text>
-                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText, marginBottom: 6 }}>PNP Patroller ({personnel?.badgeNumber || '0000'})</Text>
-                  <Text style={{ fontSize: 9, color: colors.textSecondary }}>Secret Private key:</Text>
-                  <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold', color: colors.accentAmber, letterSpacing: 1 }}>{mfaSecret}</Text>
+                <View style={{ backgroundColor: isDarkTheme ? '#0F172A' : '#F8FAFC', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.borderBlue, marginBottom: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 9, color: colors.textSecondary, alignSelf: 'flex-start' }}>Account Reference:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.blackText, marginBottom: 8, alignSelf: 'flex-start' }}>PNP Patroller ({personnel?.badgeNumber || '0000'})</Text>
+                  
+                  {/* Google Authenticator scan-ready QR code */}
+                  <View style={{
+                    backgroundColor: '#FFFFFF',
+                    padding: 8,
+                    borderRadius: 8,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Image 
+                      source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(getOTPAuthUri(personnel?.badgeNumber || '0000', mfaSecret))}` }} 
+                      style={{ width: 140, height: 140 }} 
+                      resizeMode="contain"
+                    />
+                  </View>
+
+                  <Text style={{ fontSize: 9, color: colors.textSecondary, alignSelf: 'flex-start' }}>Secret Private key:</Text>
+                  <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold', color: colors.accentAmber, letterSpacing: 1, alignSelf: 'flex-start' }}>{mfaSecret}</Text>
                   
                   <TouchableOpacity 
                     style={{ backgroundColor: colors.borderBlue, alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4, marginTop: 8 }}
