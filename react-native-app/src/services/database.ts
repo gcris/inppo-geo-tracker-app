@@ -93,7 +93,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     await db.runAsync(`INSERT INTO rank (id, rankName) VALUES (?, ?);`, ['PCpl', 'Police Corporal']);
     await db.runAsync(`INSERT INTO rank (id, rankName) VALUES (?, ?);`, ['PMSg', 'Police Master Sergeant']);
 
-    // Seed the three exact officers
+    // Seed the target officer only
     await db.runAsync(`INSERT INTO personnel (id, badgeNumber, badge_number, rank, rank_id, fullname, unitId, unit_id, designation, isApproved, is_approved, email, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`, [
       '9a7bde06-a831-4db3-96b1-096bade8cc12',
       'PNP-4820-2026',
@@ -108,38 +108,6 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       1,
       'itsme.gerrycriscariaga@gmail.com',
       'password123',
-      'patrol'
-    ]);
-    await db.runAsync(`INSERT INTO personnel (id, badgeNumber, badge_number, rank, rank_id, fullname, unitId, unit_id, designation, isApproved, is_approved, email, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`, [
-      '51bbaee6-d70b-4654-8e12-32b005fe1429',
-      'PNP-7700-1122',
-      'PNP-7700-1122',
-      'PMSg',
-      'PMSg',
-      'Benjamin Magalong',
-      mdpUnitId,
-      mdpUnitId,
-      'Sector Commander',
-      1,
-      1,
-      'magalong@pnp.gov.ph',
-      'magalong7700',
-      'commander'
-    ]);
-    await db.runAsync(`INSERT INTO personnel (id, badgeNumber, badge_number, rank, rank_id, fullname, unitId, unit_id, designation, isApproved, is_approved, email, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`, [
-      'e5bcfe10-ea9e-4ebf-8182-cdcba93ea210',
-      'PNP-1402-2026',
-      'PNP-1402-2026',
-      'Pat',
-      'Pat',
-      'Cardo Dalisay',
-      mdpUnitId,
-      mdpUnitId,
-      'Patrol Patrolman',
-      0, // PENDING STATE
-      0,
-      'cardalisay@pnp.gov.ph',
-      'dalisay1402',
       'patrol'
     ]);
 

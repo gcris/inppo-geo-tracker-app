@@ -91,18 +91,12 @@ class TrackingRepository(private val context: Context) {
 
             val matchedBadge = when {
                 lowerEmail.contains("gerry") || lowerEmail.equals("itsme.gerrycriscariaga@gmail.com") -> "PNP-4820-2026"
-                lowerEmail.contains("magalong") || lowerEmail.equals("magalong@pnp.gov.ph") -> "PNP-7700-1122"
-                lowerEmail.contains("dalisay") || lowerEmail.equals("cardalisay@pnp.gov.ph") -> "PNP-1402-2026"
                 else -> null
             }
             if (matchedBadge != null) {
                 val personnel = personnelDao.getPersonnelByBadge(matchedBadge)
                 if (personnel != null) {
-                    val expectedPassword = when (matchedBadge) {
-                        "PNP-7700-1122" -> "magalong7700"
-                        "PNP-1402-2026" -> "dalisay1402"
-                        else -> "password123"
-                    }
+                    val expectedPassword = "password123"
                     if (trimmedPassword != expectedPassword) {
                         return@withContext LoginResult.Error("Incorrect password for seeded account.")
                     }
@@ -579,38 +573,6 @@ class TrackingRepository(private val context: Context) {
                     designation = "Patrol Officer",
                     phone_number = "+639123456789",
                     viber_number = "+639123456789"
-                ),
-                PersonnelEntity(
-                    id = "51bbaee6-d70b-4654-8e12-32b005fe1429",
-                    badgeNumber = "PNP-7700-1122",
-                    rank = "PMSg",
-                    fullname = "Benjamin Magalong",
-                    unitId = mdpUnitId,
-                    isApproved = true,
-                    role = "commander",
-                    email = "magalong@pnp.gov.ph",
-                    password = "magalong7700",
-                    rank_id = "PMSg",
-                    unit_id = mdpUnitId,
-                    designation = "Sector Commander",
-                    phone_number = "+639876543210",
-                    viber_number = "+639876543210"
-                ),
-                PersonnelEntity(
-                    id = "e5bcfe10-ea9e-4ebf-8182-cdcba93ea210",
-                    badgeNumber = "PNP-1402-2026",
-                    rank = "Pat",
-                    fullname = "Cardo Dalisay",
-                    unitId = mdpUnitId,
-                    isApproved = false, // PENDING APPROVED STATE demo
-                    role = "patrol",
-                    email = "cardalisay@pnp.gov.ph",
-                    password = "dalisay1402",
-                    rank_id = "Pat",
-                    unit_id = mdpUnitId,
-                    designation = "Patrol Patrolman",
-                    phone_number = "+639111222333",
-                    viber_number = "+639111222333"
                 )
             )
             personnelDao.insertAll(personnelList)
